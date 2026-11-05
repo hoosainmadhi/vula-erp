@@ -1358,6 +1358,7 @@ function main(): void {
   const salesUserId = createUser('sales@jabulani.local', 'Thabo', 'Sales', 'sales');
   const warehouseUserId = createUser('workshop@jabulani.local', 'Sipho', 'Workshop', 'warehouse');
   const accountsUserId = createUser('accounts@jabulani.local', 'Naledi', 'Accounts', 'accountant');
+  const employeeUserId = createUser('thabo@jabulani.local', 'Thabo', 'Mokoena', 'employee');
 
   createEmployee({
     firstName: 'Jabulani',
@@ -1377,7 +1378,7 @@ function main(): void {
     jobTitle: 'Sales Manager',
     salaryCents: 3_500_000,
     startDate: '2023-03-01',
-    userId: salesUserId,
+    userId: employeeUserId,
   });
   createEmployee({
     firstName: 'Sipho',

@@ -17,6 +17,7 @@ main vula-erp dev servers.
 | Sales     | `sales@africoach.local`     | `AfricoachDemo2026!` | sales      |
 | Warehouse | `warehouse@africoach.local` | `AfricoachDemo2026!` | warehouse  |
 | Accounts  | `accounts@africoach.local`  | `AfricoachDemo2026!` | accountant |
+| Employee  | `thandi@africoach.local`    | `EmployeeDemo2026!`  | employee   |
 
 ## What is seeded
 
@@ -103,6 +104,12 @@ DB_PATH=data/africoach-demo.db npx tsx scripts/seed-africoach.ts
 
 The seed script is in `scripts/seed-africoach.ts`. It is separate from the main
 `data/vula-erp.db` database.
+
+## Employee self-service
+
+Sign in as `thandi@africoach.local` / `EmployeeDemo2026!` to see **My Leave**:
+own balances, apply for leave, and cancel a pending request. Employees do not see
+the company dashboard or other employees’ leave.
 
 ## Suggested demo flow
 

@@ -19,6 +19,7 @@ The host proxy on port 3290 routes:
 | Sales    | `sales@jabulani.local`    | `JabulaniDemo2026!` | sales      |
 | Workshop | `workshop@jabulani.local` | `JabulaniDemo2026!` | warehouse  |
 | Accounts | `accounts@jabulani.local` | `JabulaniDemo2026!` | accountant |
+| Employee | `thabo@jabulani.local`    | `EmployeeDemo2026!` | employee   |
 
 ## What is seeded
 
@@ -44,6 +45,12 @@ One deployment, two branches:
 | --------------- | ------------------- | -------------- | --------------------- |
 | Johannesburg HQ | Johannesburg HQ     | JHB Stock      | Johannesburg Register |
 | Eastern Cape    | Eastern Cape Branch | EC Stock       | Eastern Cape Register |
+
+## Employee self-service
+
+Sign in as `thabo@jabulani.local` / `EmployeeDemo2026!` to see **My Leave**:
+own balances, apply for leave, and cancel a pending request. Employees do not see
+the company dashboard or other employees’ leave.
 
 ## Suggested demo flow
 

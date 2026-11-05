@@ -1308,6 +1308,7 @@ function main(): void {
     'warehouse',
   );
   const accountsUserId = createUser('accounts@africoach.local', 'Safiya', 'Accounts', 'accountant');
+  const employeeUserId = createUser('thandi@africoach.local', 'Thandi', 'Mokoena', 'employee');
 
   createEmployee({
     firstName: 'Thandi',
@@ -1317,7 +1318,7 @@ function main(): void {
     jobTitle: 'Operations Manager',
     salaryCents: 4_500_000,
     startDate: '2024-01-15',
-    userId: adminId,
+    userId: employeeUserId,
   });
   createEmployee({
     firstName: 'Yusuf',

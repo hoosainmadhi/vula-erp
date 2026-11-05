@@ -22,6 +22,7 @@ Public pages: `/site` · Blog: `/blog`
 | Sales     | `sales@africoach.local`     | `AfricoachDemo2026!` |
 | Warehouse | `warehouse@africoach.local` | `AfricoachDemo2026!` |
 | Accounts  | `accounts@africoach.local`  | `AfricoachDemo2026!` |
+| Employee  | `thandi@africoach.local`    | `EmployeeDemo2026!`  |
 
 ### Jabulani Boards
 
@@ -31,6 +32,17 @@ Public pages: `/site` · Blog: `/blog`
 | Sales    | `sales@jabulani.local`    | `JabulaniDemo2026!` |
 | Workshop | `workshop@jabulani.local` | `JabulaniDemo2026!` |
 | Accounts | `accounts@jabulani.local` | `JabulaniDemo2026!` |
+| Employee | `thabo@jabulani.local`    | `EmployeeDemo2026!` |
+
+## Employee self-service
+
+Employees sign in with their own account and land on **My Leave**. They can see
+their own balances, apply for leave, and cancel a pending request. They do not
+see the company dashboard, other employees’ leave, or HR/admin screens.
+
+The employee login is linked to an employee record by matching the user email to
+the employee email. Administrators can also link manually by using the same email
+on both records.
 
 ## Coolify resources
 
