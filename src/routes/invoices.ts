@@ -95,7 +95,7 @@ invoicesRouter.get(
         `SELECT i.*, p.name AS partner_name, w.name AS warehouse_name,
                 COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
                           WHERE c.invoice_id = i.id AND c.status = 'posted'), 0) AS credited_cents,
-                (i.total_cents - i.amount_paid_cents -
+                MAX(0, i.total_cents - i.amount_paid_cents -
                   COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
                             WHERE c.invoice_id = i.id AND c.status = 'posted'), 0)) AS outstanding_cents,
                 CASE WHEN i.status = 'open' AND i.due_date < date('now') THEN 1 ELSE 0 END AS overdue
@@ -110,14 +110,14 @@ invoicesRouter.get(
       .prepare(
         `SELECT
            COALESCE(SUM(CASE WHEN i.direction = 'sale' AND i.status = 'open'
-             THEN i.total_cents - i.amount_paid_cents -
+             THEN MAX(0, i.total_cents - i.amount_paid_cents -
                COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
-                         WHERE c.invoice_id = i.id AND c.status = 'posted'), 0)
+                         WHERE c.invoice_id = i.id AND c.status = 'posted'), 0))
              END), 0) AS receivable_cents,
            COALESCE(SUM(CASE WHEN i.direction = 'purchase' AND i.status = 'open'
-             THEN i.total_cents - i.amount_paid_cents -
+             THEN MAX(0, i.total_cents - i.amount_paid_cents -
                COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
-                         WHERE c.invoice_id = i.id AND c.status = 'posted'), 0)
+                         WHERE c.invoice_id = i.id AND c.status = 'posted'), 0))
              END), 0) AS payable_cents
          FROM invoices i`,
       )

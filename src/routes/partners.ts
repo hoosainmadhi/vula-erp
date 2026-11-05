@@ -88,7 +88,7 @@ partnersRouter.get(
         `SELECT id, number, issue_date, due_date, total_cents, amount_paid_cents,
                 COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
                           WHERE c.invoice_id = invoices.id AND c.status = 'posted'), 0) AS credited_cents,
-                (total_cents - amount_paid_cents -
+                MAX(0, total_cents - amount_paid_cents -
                   COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
                             WHERE c.invoice_id = invoices.id AND c.status = 'posted'), 0)) AS outstanding_cents,
                 status

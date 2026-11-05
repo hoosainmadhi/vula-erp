@@ -22,7 +22,10 @@ export default function PrintInvoicePage() {
   const inv = invoice.data.invoice;
   const s = settings.data?.settings ?? {};
   const title = inv.direction === 'sale' ? 'Tax Invoice' : 'Supplier Bill';
-  const outstanding = inv.total_cents - inv.amount_paid_cents - (inv.credited_cents ?? 0);
+  const outstanding = Math.max(
+    0,
+    inv.total_cents - inv.amount_paid_cents - (inv.credited_cents ?? 0),
+  );
 
   return (
     <BrandedDocument

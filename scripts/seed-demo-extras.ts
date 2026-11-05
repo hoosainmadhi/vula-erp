@@ -354,7 +354,8 @@ function seedCreditNotes(adminId: number | null): void {
     .prepare(
       `SELECT i.id, i.number, i.partner_id, i.total_cents
        FROM invoices i
-       WHERE i.direction = 'sale' AND i.status IN ('open', 'paid') AND i.total_cents >= 100000
+       WHERE i.direction = 'sale' AND i.status = 'open'
+         AND (i.total_cents - i.amount_paid_cents) >= 30000
        ORDER BY i.id DESC LIMIT 1`,
     )
     .get() as { id: number; number: string; partner_id: number; total_cents: number } | undefined;
