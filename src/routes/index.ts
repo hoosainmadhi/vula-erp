@@ -24,6 +24,8 @@ import { posRouter } from './pos.js';
 import { blogsRouter, publicBlogsRouter } from './blogs.js';
 import { websiteRouter, publicWebsiteRouter } from './website.js';
 import { workshopRouter } from './workshop.js';
+import { quotationsRouter } from './quotations.js';
+import { creditNotesRouter } from './creditNotes.js';
 
 export const apiRouter = Router();
 
@@ -41,7 +43,9 @@ apiRouter.use('/tax-rates', requireModule('products'), taxRatesRouter);
 apiRouter.use('/inventory', requireModule('inventory'), inventoryRouter);
 apiRouter.use('/purchase-orders', requireModule('purchases'), purchasesRouter);
 apiRouter.use('/sales-orders', requireModule('sales'), salesRouter);
+apiRouter.use('/quotations', requireModule('sales'), quotationsRouter);
 apiRouter.use('/invoices', requireModule('invoicing'), invoicesRouter);
+apiRouter.use('/credit-notes', requireModule('invoicing'), creditNotesRouter);
 apiRouter.use('/accounting', requireModule('accounting'), accountingRouter);
 apiRouter.use('/employees', requireModule('hr'), employeesRouter);
 apiRouter.use('/departments', requireModule('hr'), departmentsRouter);

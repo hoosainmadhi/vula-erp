@@ -938,3 +938,70 @@ CREATE TABLE workshop_job_files (
 );
 
 CREATE INDEX ix_workshop_files_job ON workshop_job_files(job_id);
+
+-- Quotations: branded quotes that convert to sales orders
+CREATE TABLE quotations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  number TEXT NOT NULL UNIQUE,
+  customer_id INTEGER NOT NULL REFERENCES partners(id) ON DELETE RESTRICT,
+  warehouse_id INTEGER REFERENCES warehouses(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'sent', 'accepted', 'expired', 'converted', 'cancelled')),
+  quote_date TEXT NOT NULL,
+  valid_until TEXT,
+  subtotal_cents INTEGER NOT NULL DEFAULT 0 CHECK (subtotal_cents >= 0),
+  tax_cents INTEGER NOT NULL DEFAULT 0 CHECK (tax_cents >= 0),
+  total_cents INTEGER NOT NULL DEFAULT 0 CHECK (total_cents >= 0),
+  notes TEXT,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE quotation_lines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  quotation_id INTEGER NOT NULL REFERENCES quotations(id) ON DELETE CASCADE,
+  product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+  description TEXT NOT NULL,
+  quantity REAL NOT NULL CHECK (quantity > 0),
+  unit_price_cents INTEGER NOT NULL CHECK (unit_price_cents >= 0),
+  tax_rate_bp INTEGER NOT NULL DEFAULT 0 CHECK (tax_rate_bp >= 0),
+  line_subtotal_cents INTEGER NOT NULL DEFAULT 0,
+  line_tax_cents INTEGER NOT NULL DEFAULT 0,
+  line_total_cents INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX ix_quotations_customer ON quotations(customer_id);
+CREATE INDEX ix_quotation_lines_quote ON quotation_lines(quotation_id);
+
+-- Credit notes: partial or full credits against an invoice
+CREATE TABLE credit_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  number TEXT NOT NULL UNIQUE,
+  invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+  partner_id INTEGER NOT NULL REFERENCES partners(id) ON DELETE RESTRICT,
+  issue_date TEXT NOT NULL,
+  subtotal_cents INTEGER NOT NULL DEFAULT 0 CHECK (subtotal_cents >= 0),
+  tax_cents INTEGER NOT NULL DEFAULT 0 CHECK (tax_cents >= 0),
+  total_cents INTEGER NOT NULL DEFAULT 0 CHECK (total_cents >= 0),
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('posted', 'void')),
+  journal_entry_id INTEGER REFERENCES journal_entries(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX ix_credit_notes_invoice ON credit_notes(invoice_id);
+
+-- Project costing: materials, labour and expenses per project
+CREATE TABLE project_costs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('material', 'labour', 'expense')),
+  description TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+  cost_date TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX ix_project_costs_project ON project_costs(project_id);

@@ -101,6 +101,13 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         module: 'sales',
       },
       {
+        to: '/quotations',
+        label: 'Quotations',
+        icon: FileText,
+        permission: 'sales.view',
+        module: 'sales',
+      },
+      {
         to: '/invoices',
         label: 'Invoices & Payments',
         icon: Receipt,

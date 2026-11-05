@@ -27,7 +27,15 @@ import {
   payloadLines,
   type DraftLine,
 } from '../components/LineItemsEditor';
-import type { Invoice, InvoiceLine, Partner, Payment, Product, Warehouse } from '../types';
+import type {
+  CreditNote,
+  Invoice,
+  InvoiceLine,
+  Partner,
+  Payment,
+  Product,
+  Warehouse,
+} from '../types';
 
 interface InvoiceDetail {
   invoice: Invoice;
@@ -367,17 +375,118 @@ function PaymentModal({
   );
 }
 
+function CreditNoteForm({
+  invoice,
+  onSaved,
+  onClose,
+}: {
+  invoice: Invoice;
+  onSaved: () => void;
+  onClose: () => void;
+}) {
+  const [subtotal, setSubtotal] = useState((invoice.subtotal_cents / 100).toFixed(2));
+  const [tax, setTax] = useState((invoice.tax_cents / 100).toFixed(2));
+  const [issueDate, setIssueDate] = useState(today());
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post('/credit-notes', {
+        invoiceId: invoice.id,
+        issueDate,
+        subtotalCents: Math.round((Number(subtotal) || 0) * 100),
+        taxCents: Math.round((Number(tax) || 0) * 100),
+        reason: reason || null,
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      {error ? <ErrorBox message={error} /> : null}
+      <div className="rounded-lg bg-slate-50 p-3 text-sm">
+        <p className="text-slate-500">Credit against</p>
+        <p className="font-semibold text-slate-900">
+          {invoice.number} — {invoice.partner_name}
+        </p>
+        <p className="text-xs text-slate-400">Invoice total {money(invoice.total_cents)}</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Net credit (R)">
+          <input
+            className={inputCls}
+            type="number"
+            min={0}
+            step="0.01"
+            value={subtotal}
+            onChange={(event) => setSubtotal(event.target.value)}
+          />
+        </Field>
+        <Field label="VAT credit (R)">
+          <input
+            className={inputCls}
+            type="number"
+            min={0}
+            step="0.01"
+            value={tax}
+            onChange={(event) => setTax(event.target.value)}
+          />
+        </Field>
+        <Field label="Issue date">
+          <input
+            className={inputCls}
+            type="date"
+            value={issueDate}
+            onChange={(event) => setIssueDate(event.target.value)}
+            required
+          />
+        </Field>
+      </div>
+      <Field label="Reason">
+        <textarea
+          className={inputCls}
+          rows={2}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Damaged stock, short delivery, pricing correction…"
+        />
+      </Field>
+      <div className="flex justify-end gap-2">
+        <button type="button" className={btnSecondary} onClick={onClose}>
+          Cancel
+        </button>
+        <button type="submit" className={btnPrimary} disabled={busy}>
+          {busy ? 'Posting…' : 'Post credit note'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function DetailModal({
   detail,
   canManage,
   onClose,
   onPay,
+  onCredit,
   onChanged,
 }: {
   detail: InvoiceDetail;
   canManage: boolean;
   onClose: () => void;
   onPay: () => void;
+  onCredit: () => void;
   onChanged: (message: string) => void;
 }) {
   const invoice = detail.invoice;
@@ -522,6 +631,11 @@ function DetailModal({
                 </button>
               </>
             ) : null}
+            {invoice.status === 'open' || invoice.status === 'paid' ? (
+              <button type="button" className={btnSecondary} disabled={busy} onClick={onCredit}>
+                Credit note
+              </button>
+            ) : null}
             {invoice.status === 'open' ? (
               <>
                 <button type="button" className={btnSecondary} disabled={busy} onClick={onPay}>
@@ -556,7 +670,7 @@ function DetailModal({
 
 export default function InvoicesPage() {
   const { can } = useAuth();
-  const [tab, setTab] = useState<'invoices' | 'payments'>('invoices');
+  const [tab, setTab] = useState<'invoices' | 'payments' | 'credit-notes'>('invoices');
   const [direction, setDirection] = useState('all');
   const [status, setStatus] = useState('all');
   const [overdue, setOverdue] = useState(false);
@@ -565,6 +679,7 @@ export default function InvoicesPage() {
   const [creating, setCreating] = useState(false);
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<Invoice | 'new' | null>(null);
+  const [creditTarget, setCreditTarget] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -591,6 +706,7 @@ export default function InvoicesPage() {
   const partners = useFetch<{ partners: Partner[] }>('/partners?limit=500');
   const products = useFetch<{ products: Product[] }>('/products?limit=1000');
   const warehouses = useFetch<{ warehouses: Warehouse[] }>('/inventory/warehouses');
+  const creditNotes = useFetch<{ creditNotes: CreditNote[] }>('/credit-notes');
 
   const openDetail = async (invoice: Invoice) => {
     setError(null);
@@ -655,6 +771,7 @@ export default function InvoicesPage() {
             [
               ['invoices', 'Invoices'],
               ['payments', 'Payments'],
+              ['credit-notes', 'Credit notes'],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -837,60 +954,107 @@ export default function InvoicesPage() {
             </table>
           </div>
         )
-      ) : payments.loading && !payments.data ? (
-        <Spinner />
-      ) : payments.error ? (
-        <ErrorBox message={payments.error} />
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead>
-              <tr>
-                <th className={thCls}>Number</th>
-                <th className={thCls}>Date</th>
-                <th className={thCls}>Direction</th>
-                <th className={thCls}>Partner</th>
-                <th className={thCls}>Invoice</th>
-                <th className={thCls}>Method</th>
-                <th className={`${thCls} text-right`}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!payments.data || payments.data.payments.length === 0 ? (
-                <EmptyState colSpan={7} message="No payments recorded." />
-              ) : (
-                payments.data.payments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-slate-50">
-                    <td className={`${tdCls} font-mono text-xs`}>{payment.number}</td>
-                    <td className={tdCls}>{shortDate(payment.payment_date)}</td>
-                    <td className={tdCls}>
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
-                          payment.direction === 'in'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-red-50 text-red-700'
-                        }`}
-                      >
-                        {payment.direction === 'in' ? 'Money in' : 'Money out'}
-                      </span>
-                    </td>
-                    <td className={`${tdCls} font-medium text-slate-800`}>
-                      {payment.partner_name}
-                    </td>
-                    <td className={`${tdCls} font-mono text-xs text-slate-500`}>
-                      {payment.invoice_number ?? '—'}
-                    </td>
-                    <td className={tdCls}>{titleCase(payment.method)}</td>
-                    <td className={`${tdCls} text-right font-semibold`}>
-                      {money(payment.amount_cents)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      ) : tab === 'payments' ? (
+        payments.loading && !payments.data ? (
+          <Spinner />
+        ) : payments.error ? (
+          <ErrorBox message={payments.error} />
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead>
+                <tr>
+                  <th className={thCls}>Number</th>
+                  <th className={thCls}>Date</th>
+                  <th className={thCls}>Direction</th>
+                  <th className={thCls}>Partner</th>
+                  <th className={thCls}>Invoice</th>
+                  <th className={thCls}>Method</th>
+                  <th className={`${thCls} text-right`}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!payments.data || payments.data.payments.length === 0 ? (
+                  <EmptyState colSpan={7} message="No payments recorded." />
+                ) : (
+                  payments.data.payments.map((payment) => (
+                    <tr key={payment.id} className="hover:bg-slate-50">
+                      <td className={`${tdCls} font-mono text-xs`}>{payment.number}</td>
+                      <td className={tdCls}>{shortDate(payment.payment_date)}</td>
+                      <td className={tdCls}>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+                            payment.direction === 'in'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-red-50 text-red-700'
+                          }`}
+                        >
+                          {payment.direction === 'in' ? 'Money in' : 'Money out'}
+                        </span>
+                      </td>
+                      <td className={`${tdCls} font-medium text-slate-800`}>
+                        {payment.partner_name}
+                      </td>
+                      <td className={`${tdCls} font-mono text-xs text-slate-500`}>
+                        {payment.invoice_number ?? '—'}
+                      </td>
+                      <td className={tdCls}>{titleCase(payment.method)}</td>
+                      <td className={`${tdCls} text-right font-semibold`}>
+                        {money(payment.amount_cents)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : null}
+
+      {tab === 'credit-notes' ? (
+        creditNotes.loading && !creditNotes.data ? (
+          <Spinner />
+        ) : creditNotes.error ? (
+          <ErrorBox message={creditNotes.error} />
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead>
+                <tr>
+                  <th className={thCls}>Number</th>
+                  <th className={thCls}>Invoice</th>
+                  <th className={thCls}>Partner</th>
+                  <th className={thCls}>Issued</th>
+                  <th className={thCls}>Reason</th>
+                  <th className={`${thCls} text-right`}>Net</th>
+                  <th className={`${thCls} text-right`}>VAT</th>
+                  <th className={`${thCls} text-right`}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!creditNotes.data || creditNotes.data.creditNotes.length === 0 ? (
+                  <EmptyState colSpan={8} message="No credit notes yet." />
+                ) : (
+                  creditNotes.data.creditNotes.map((note) => (
+                    <tr key={note.id} className="hover:bg-slate-50">
+                      <td className={`${tdCls} font-mono text-xs font-semibold`}>{note.number}</td>
+                      <td className={`${tdCls} font-mono text-xs`}>{note.invoice_number}</td>
+                      <td className={tdCls}>{note.partner_name}</td>
+                      <td className={tdCls}>{shortDate(note.issue_date)}</td>
+                      <td className={tdCls}>{note.reason ?? '—'}</td>
+                      <td className={`${tdCls} text-right`}>{money(note.subtotal_cents)}</td>
+                      <td className={`${tdCls} text-right`}>{money(note.tax_cents)}</td>
+                      <td className={`${tdCls} text-right font-semibold`}>
+                        {money(note.total_cents)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : null}
 
       {creating ? (
         <Modal title="New invoice" onClose={() => setCreating(false)} wide>
@@ -912,6 +1076,10 @@ export default function InvoicesPage() {
             setPaymentTarget(detail.invoice);
             setDetail(null);
           }}
+          onCredit={() => {
+            setCreditTarget(detail.invoice);
+            setDetail(null);
+          }}
           onChanged={refreshAll}
         />
       ) : null}
@@ -923,6 +1091,19 @@ export default function InvoicesPage() {
           onClose={() => setPaymentTarget(null)}
           onSaved={() => refreshAll('Payment recorded and posted.')}
         />
+      ) : null}
+
+      {creditTarget ? (
+        <Modal title="Credit note" onClose={() => setCreditTarget(null)}>
+          <CreditNoteForm
+            invoice={creditTarget}
+            onSaved={() => {
+              creditNotes.reload();
+              refreshAll('Credit note posted to the ledger.');
+            }}
+            onClose={() => setCreditTarget(null)}
+          />
+        </Modal>
       ) : null}
     </>
   );

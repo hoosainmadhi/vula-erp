@@ -31,6 +31,8 @@ const BlogPostPage = lazy(() => import('./pages/BlogPostPage'));
 const PublicSitePage = lazy(() => import('./pages/PublicSitePage'));
 const MyLeavePage = lazy(() => import('./pages/MyLeavePage'));
 const WorkshopPage = lazy(() => import('./pages/WorkshopPage'));
+const QuotationsPage = lazy(() => import('./pages/QuotationsPage'));
+const PrintQuotationPage = lazy(() => import('./pages/PrintQuotationPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const PluginsPage = lazy(() => import('./pages/PluginsPage'));
@@ -143,6 +145,21 @@ export default function App() {
 
   if (location.pathname.startsWith('/login')) return <Navigate to="/" replace />;
 
+  if (location.pathname.startsWith('/print/')) {
+    return (
+      <Routes>
+        <Route
+          path="/print/quotation/:id"
+          element={
+            <Page>
+              <PrintQuotationPage />
+            </Page>
+          }
+        />
+      </Routes>
+    );
+  }
+
   return (
     <ModulesProvider>
       <Routes>
@@ -204,6 +221,16 @@ export default function App() {
               <Guard permission="sales.view" module="sales">
                 <Page>
                   <SalesOrdersPage />
+                </Page>
+              </Guard>
+            }
+          />
+          <Route
+            path="/quotations"
+            element={
+              <Guard permission="sales.view" module="sales">
+                <Page>
+                  <QuotationsPage />
                 </Page>
               </Guard>
             }

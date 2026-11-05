@@ -10,7 +10,9 @@ import {
   optionalNumber,
   optionalString,
   paramId,
+  requireDate,
   requireEnum,
+  requireInt,
   requireString,
 } from '../utils/validate.js';
 import { nextNumber } from '../services/sequences.js';
@@ -83,7 +85,75 @@ projectsRouter.get(
     const project = db.prepare(`${PROJECT_SELECT} WHERE p.id = ?`).get(id);
     if (!project) throw notFound('Project not found');
     const tasks = db.prepare(`${TASK_SELECT} WHERE t.project_id = ? ORDER BY t.created_at`).all(id);
-    res.json({ project, tasks });
+    const costs = db
+      .prepare('SELECT * FROM project_costs WHERE project_id = ? ORDER BY cost_date DESC, id DESC')
+      .all(id) as { type: string; amount_cents: number }[];
+    const totals = { material: 0, labour: 0, expense: 0 };
+    for (const cost of costs) {
+      if (cost.type in totals) totals[cost.type as keyof typeof totals] += cost.amount_cents;
+    }
+    const totalCost = totals.material + totals.labour + totals.expense;
+    const budget = Number((project as { budget_cents: number }).budget_cents ?? 0);
+    res.json({
+      project,
+      tasks,
+      costs,
+      profitability: { budget, ...totals, totalCost, margin: budget - totalCost },
+    });
+  }),
+);
+
+projectsRouter.get(
+  '/:id/costs',
+  requirePermission('projects.view'),
+  asyncHandler(async (req, res) => {
+    const id = paramId(req.params.id);
+    const costs = getDb()
+      .prepare('SELECT * FROM project_costs WHERE project_id = ? ORDER BY cost_date DESC, id DESC')
+      .all(id);
+    res.json({ costs });
+  }),
+);
+
+projectsRouter.post(
+  '/:id/costs',
+  requirePermission('projects.manage'),
+  asyncHandler(async (req, res) => {
+    const projectId = paramId(req.params.id);
+    const db = getDb();
+    if (!db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId)) {
+      throw notFound('Project not found');
+    }
+    const result = db
+      .prepare(
+        `INSERT INTO project_costs (project_id, type, description, amount_cents, cost_date, created_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        projectId,
+        requireEnum(req.body?.type, 'Type', ['material', 'labour', 'expense'] as const),
+        requireString(req.body?.description, 'Description', 500),
+        requireInt(req.body?.amountCents, 'Amount', 0),
+        requireDate(req.body?.costDate, 'Cost date'),
+        req.user!.id,
+      );
+    const id = Number(result.lastInsertRowid);
+    recordAudit(req.user!.id, 'create', 'project_cost', id, { projectId });
+    res.status(201).json({
+      cost: db.prepare('SELECT * FROM project_costs WHERE id = ?').get(id),
+    });
+  }),
+);
+
+projectsRouter.delete(
+  '/costs/:costId',
+  requirePermission('projects.manage'),
+  asyncHandler(async (req, res) => {
+    const id = paramId(req.params.costId);
+    const result = getDb().prepare('DELETE FROM project_costs WHERE id = ?').run(id);
+    if (result.changes === 0) throw notFound('Project cost not found');
+    recordAudit(req.user!.id, 'delete', 'project_cost', id);
+    res.json({ ok: true });
   }),
 );
 

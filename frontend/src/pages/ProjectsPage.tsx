@@ -3,7 +3,7 @@ import { FolderKanban, ListChecks, Plus, Search } from 'lucide-react';
 import { api, errorMessage } from '../api';
 import { useAuth } from '../auth';
 import { useFetch } from '../lib/useFetch';
-import { money, shortDate, titleCase } from '../lib/format';
+import { money, shortDate, titleCase, today } from '../lib/format';
 import {
   Badge,
   btnGhost,
@@ -19,7 +19,7 @@ import {
   tdCls,
   thCls,
 } from '../components/ui';
-import type { EmployeeOption, Project, ProjectTask } from '../types';
+import type { EmployeeOption, Project, ProjectCost, ProjectTask } from '../types';
 
 const PROJECT_STATUSES = ['planned', 'active', 'on_hold', 'completed', 'cancelled'] as const;
 const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done'] as const;
@@ -182,7 +182,23 @@ function ProjectDetail({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const detail = useFetch<{ project: Project; tasks: ProjectTask[] }>(`/projects/${projectId}`);
+  const detail = useFetch<{
+    project: Project;
+    tasks: ProjectTask[];
+    costs: ProjectCost[];
+    profitability: {
+      budget: number;
+      material: number;
+      labour: number;
+      expense: number;
+      totalCost: number;
+      margin: number;
+    };
+  }>(`/projects/${projectId}`);
+  const [costType, setCostType] = useState<'material' | 'labour' | 'expense'>('material');
+  const [costDescription, setCostDescription] = useState('');
+  const [costAmount, setCostAmount] = useState('0.00');
+  const [costDate, setCostDate] = useState(today());
   const [title, setTitle] = useState('');
   const [assignee, setAssignee] = useState('');
   const [priority, setPriority] = useState('medium');
@@ -238,8 +254,44 @@ function ProjectDetail({
     }
   };
 
+  const addCost = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/projects/${projectId}/costs`, {
+        type: costType,
+        description: costDescription,
+        amountCents: Math.round((Number(costAmount) || 0) * 100),
+        costDate,
+      });
+      setCostDescription('');
+      setCostAmount('0.00');
+      detail.reload();
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeCost = async (cost: ProjectCost) => {
+    if (!window.confirm(`Delete cost “${cost.description}”?`)) return;
+    setError(null);
+    try {
+      await api.del(`/projects/costs/${cost.id}`);
+      detail.reload();
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
   const project = detail.data?.project;
   const tasks = detail.data?.tasks ?? [];
+  const costs = detail.data?.costs ?? [];
+  const profitability = detail.data?.profitability;
   const done = tasks.filter((task) => task.status === 'done').length;
 
   return (
@@ -343,6 +395,131 @@ function ProjectDetail({
               </tbody>
             </table>
           </div>
+
+          {profitability ? (
+            <div className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-5">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Budget</p>
+                <p className="mt-1 font-semibold text-slate-900">{money(profitability.budget)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Materials</p>
+                <p className="mt-1 font-semibold text-slate-900">{money(profitability.material)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Labour</p>
+                <p className="mt-1 font-semibold text-slate-900">{money(profitability.labour)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Expenses</p>
+                <p className="mt-1 font-semibold text-slate-900">{money(profitability.expense)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Margin</p>
+                <p
+                  className={`mt-1 font-bold ${
+                    profitability.margin >= 0 ? 'text-emerald-700' : 'text-red-600'
+                  }`}
+                >
+                  {money(profitability.margin)}
+                </p>
+                <p className="text-xs text-slate-400">Cost {money(profitability.totalCost)}</p>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead>
+                <tr>
+                  <th className={thCls}>Date</th>
+                  <th className={thCls}>Type</th>
+                  <th className={thCls}>Cost</th>
+                  <th className={`${thCls} text-right`}>Amount</th>
+                  <th className={thCls} />
+                </tr>
+              </thead>
+              <tbody>
+                {costs.length === 0 ? (
+                  <EmptyState colSpan={5} message="No costs recorded yet." />
+                ) : (
+                  costs.map((cost) => (
+                    <tr key={cost.id} className="hover:bg-slate-50">
+                      <td className={tdCls}>{shortDate(cost.cost_date)}</td>
+                      <td className={tdCls}>
+                        <Badge value={cost.type} />
+                      </td>
+                      <td className={tdCls}>{cost.description}</td>
+                      <td className={`${tdCls} text-right font-semibold`}>
+                        {money(cost.amount_cents)}
+                      </td>
+                      <td className={tdCls}>
+                        {canManage ? (
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              className={`${btnGhost} text-red-600`}
+                              onClick={() => void removeCost(cost)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {canManage ? (
+            <form
+              onSubmit={addCost}
+              className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-12"
+            >
+              <select
+                className={`${inputCls} sm:col-span-2`}
+                value={costType}
+                onChange={(event) =>
+                  setCostType(event.target.value as 'material' | 'labour' | 'expense')
+                }
+              >
+                <option value="material">Material</option>
+                <option value="labour">Labour</option>
+                <option value="expense">Expense</option>
+              </select>
+              <input
+                className={`${inputCls} sm:col-span-4`}
+                placeholder="Cost description…"
+                value={costDescription}
+                onChange={(event) => setCostDescription(event.target.value)}
+                required
+              />
+              <input
+                className={`${inputCls} sm:col-span-2`}
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Amount (R)"
+                value={costAmount}
+                onChange={(event) => setCostAmount(event.target.value)}
+                required
+              />
+              <input
+                className={`${inputCls} sm:col-span-2`}
+                type="date"
+                value={costDate}
+                onChange={(event) => setCostDate(event.target.value)}
+                required
+              />
+              <div className="sm:col-span-2 flex justify-end">
+                <button type="submit" className={btnPrimary} disabled={busy}>
+                  <Plus className="size-4" /> Add cost
+                </button>
+              </div>
+            </form>
+          ) : null}
 
           {canManage ? (
             <form

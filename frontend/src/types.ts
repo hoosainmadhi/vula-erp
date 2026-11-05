@@ -992,3 +992,65 @@ export interface WorkshopJob {
   operations?: WorkshopOperation[];
   files?: WorkshopFile[];
 }
+
+export interface ProjectCost {
+  id: number;
+  project_id: number;
+  type: 'material' | 'labour' | 'expense';
+  description: string;
+  amount_cents: number;
+  cost_date: string;
+  created_at: string;
+}
+
+export interface QuotationLine {
+  id: number;
+  quotation_id: number;
+  product_id: number | null;
+  description: string;
+  quantity: number;
+  unit_price_cents: number;
+  tax_rate_bp: number;
+  line_subtotal_cents: number;
+  line_tax_cents: number;
+  line_total_cents: number;
+}
+
+export interface Quotation {
+  id: number;
+  number: string;
+  customer_id: number;
+  customer_name: string;
+  customer_email: string | null;
+  customer_vat_number: string | null;
+  customer_address: string | null;
+  warehouse_id: number | null;
+  warehouse_name: string | null;
+  status: 'draft' | 'sent' | 'accepted' | 'expired' | 'converted' | 'cancelled';
+  quote_date: string;
+  valid_until: string | null;
+  subtotal_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  notes: string | null;
+  line_count?: number;
+  lines?: QuotationLine[];
+}
+
+export interface CreditNote {
+  id: number;
+  number: string;
+  invoice_id: number;
+  invoice_number: string;
+  invoice_direction: 'sale' | 'purchase';
+  partner_id: number;
+  partner_name: string;
+  issue_date: string;
+  subtotal_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  reason: string | null;
+  status: 'posted' | 'void';
+  journal_entry_id: number | null;
+  created_at: string;
+}
