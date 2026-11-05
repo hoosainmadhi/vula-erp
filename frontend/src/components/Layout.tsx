@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
+  ArrowLeftRight,
+  Banknote,
   Blocks,
   Boxes,
   Briefcase,
+  CalendarCheck,
   CalendarDays,
   ClipboardList,
   Clock,
@@ -24,6 +27,7 @@ import {
   Store,
   UserCog,
   Users,
+  Upload,
   Warehouse,
   Wrench,
   X,
@@ -148,6 +152,20 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         module: 'accounting',
       },
       {
+        to: '/expenses',
+        label: 'Expenses',
+        icon: Banknote,
+        permission: 'expenses.view',
+        module: 'expenses',
+      },
+      {
+        to: '/bank-reconciliation',
+        label: 'Bank reconciliation',
+        icon: ArrowLeftRight,
+        permission: 'accounting.view',
+        module: 'accounting',
+      },
+      {
         to: '/employees',
         label: 'Employees',
         icon: Boxes,
@@ -167,6 +185,13 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         icon: Clock,
         permission: 'hr.view',
         module: 'timesheets',
+      },
+      {
+        to: '/attendance',
+        label: 'Attendance',
+        icon: CalendarCheck,
+        permission: 'attendance.view',
+        module: 'attendance',
       },
       {
         to: '/projects',
@@ -211,6 +236,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         module: 'website',
       },
       { to: '/plugins', label: 'Plugins', icon: Blocks, permission: 'modules.manage' },
+      { to: '/imports', label: 'Data import', icon: Upload, permission: 'data.import' },
       { to: '/users', label: 'Users & Roles', icon: UserCog, permission: 'users.manage' },
       { to: '/settings', label: 'Settings', icon: Settings, permission: 'settings.manage' },
     ],

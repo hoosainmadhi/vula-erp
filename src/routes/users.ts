@@ -5,6 +5,7 @@ import { authenticate, requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
 import { ValidationError, notFound } from '../utils/errors.js';
 import {
+  optionalInt,
   optionalString,
   paramId,
   requireEnum,
@@ -40,12 +41,20 @@ function setRoles(userId: number, names: string[]): void {
   for (const roleId of roleIdsFor(names)) insert.run(userId, roleId);
 }
 
+function assertWarehouse(warehouseId: number | null): void {
+  if (warehouseId === null) return;
+  if (!getDb().prepare('SELECT id FROM warehouses WHERE id = ?').get(warehouseId)) {
+    throw new ValidationError('Warehouse not found');
+  }
+}
+
 interface UserWithRoles {
   id: number;
   email: string;
   first_name: string;
   last_name: string;
   is_active: number;
+  warehouse_id: number | null;
   last_login_at: string | null;
   created_at: string;
   roles: string[];
@@ -55,7 +64,8 @@ function userRow(id: number): UserWithRoles {
   const db = getDb();
   const user = db
     .prepare(
-      `SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, u.last_login_at, u.created_at,
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, u.warehouse_id,
+              u.last_login_at, u.created_at,
               COALESCE(GROUP_CONCAT(r.name, ','), '') AS role_names
        FROM users u
        LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -75,7 +85,8 @@ usersRouter.get(
   asyncHandler(async (_req, res) => {
     const rows = getDb()
       .prepare(
-        `SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, u.last_login_at, u.created_at,
+        `SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, u.warehouse_id,
+                u.last_login_at, u.created_at,
                 COALESCE(GROUP_CONCAT(r.name, ','), '') AS role_names
          FROM users u
          LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -106,6 +117,8 @@ usersRouter.post(
     const roles = Array.isArray(req.body?.roles)
       ? (req.body.roles as unknown[]).map(String)
       : ['viewer'];
+    const warehouseId = optionalInt(req.body?.warehouseId, 'Branch', 1);
+    assertWarehouse(warehouseId);
 
     const db = getDb();
     const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
@@ -114,9 +127,10 @@ usersRouter.post(
     const id = db.transaction(() => {
       const result = db
         .prepare(
-          'INSERT INTO users (email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?)',
+          `INSERT INTO users (email, password_hash, first_name, last_name, warehouse_id)
+           VALUES (?, ?, ?, ?, ?)`,
         )
-        .run(email, bcrypt.hashSync(password, 10), firstName, lastName);
+        .run(email, bcrypt.hashSync(password, 10), firstName, lastName, warehouseId);
       const userId = Number(result.lastInsertRowid);
       setRoles(userId, roles);
       db.prepare(
@@ -161,6 +175,13 @@ usersRouter.put(
         db.prepare(
           "UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?",
         ).run(bcrypt.hashSync(req.body.password, 10), id);
+      }
+      if (req.body?.warehouseId !== undefined) {
+        const warehouseId = optionalInt(req.body.warehouseId, 'Branch', 1);
+        assertWarehouse(warehouseId);
+        db.prepare(
+          "UPDATE users SET warehouse_id = ?, updated_at = datetime('now') WHERE id = ?",
+        ).run(warehouseId, id);
       }
       if (Array.isArray(req.body?.roles)) setRoles(id, (req.body.roles as unknown[]).map(String));
       db.prepare(

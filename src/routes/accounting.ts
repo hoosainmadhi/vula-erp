@@ -262,6 +262,102 @@ accountingRouter.get(
 );
 
 accountingRouter.get(
+  '/reports/aging',
+  requirePermission('accounting.view'),
+  asyncHandler(async (req, res) => {
+    const asOf = optionalDate(req.query.asOf, 'As of date') ?? today();
+    const direction = requireEnum(req.query.direction ?? 'sale', 'Direction', [
+      'sale',
+      'purchase',
+    ] as const);
+    const rows = getDb()
+      .prepare(
+        `SELECT i.id, i.number, i.partner_id, p.name AS partner_name,
+                i.issue_date, i.due_date,
+                i.total_cents - i.amount_paid_cents -
+                  COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
+                            WHERE c.invoice_id = i.id AND c.status = 'posted'), 0) AS balance_cents
+         FROM invoices i
+         JOIN partners p ON p.id = i.partner_id
+         WHERE i.direction = ? AND i.status = 'open' AND i.issue_date <= ?
+         ORDER BY p.name, i.due_date, i.id`,
+      )
+      .all(direction, asOf) as {
+      id: number;
+      number: string;
+      partner_id: number;
+      partner_name: string;
+      issue_date: string;
+      due_date: string;
+      balance_cents: number;
+    }[];
+
+    const dayDiff = (dueDate: string): number =>
+      Math.floor(
+        (Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${dueDate}T00:00:00Z`)) /
+          (24 * 60 * 60 * 1000),
+      );
+
+    interface Buckets {
+      current: number;
+      days1_30: number;
+      days31_60: number;
+      days61_90: number;
+      days90_plus: number;
+      total: number;
+    }
+    const emptyBuckets = (): Buckets => ({
+      current: 0,
+      days1_30: 0,
+      days31_60: 0,
+      days61_90: 0,
+      days90_plus: 0,
+      total: 0,
+    });
+
+    const partners = new Map<
+      number,
+      { partner_id: number; partner_name: string; buckets: Buckets; invoices: number }
+    >();
+    const totals = emptyBuckets();
+
+    for (const row of rows) {
+      if (row.balance_cents <= 0) continue;
+      const entry = partners.get(row.partner_id) ?? {
+        partner_id: row.partner_id,
+        partner_name: row.partner_name,
+        buckets: emptyBuckets(),
+        invoices: 0,
+      };
+      const days = dayDiff(row.due_date);
+      const bucket =
+        days <= 0
+          ? 'current'
+          : days <= 30
+            ? 'days1_30'
+            : days <= 60
+              ? 'days31_60'
+              : days <= 90
+                ? 'days61_90'
+                : 'days90_plus';
+      entry.buckets[bucket] += row.balance_cents;
+      entry.buckets.total += row.balance_cents;
+      entry.invoices += 1;
+      totals[bucket] += row.balance_cents;
+      totals.total += row.balance_cents;
+      partners.set(row.partner_id, entry);
+    }
+
+    res.json({
+      asOf,
+      direction,
+      partners: [...partners.values()].sort((a, b) => b.buckets.total - a.buckets.total),
+      totals,
+    });
+  }),
+);
+
+accountingRouter.get(
   '/reports/ledger/:accountId',
   requirePermission('accounting.view'),
   asyncHandler(async (req, res) => {

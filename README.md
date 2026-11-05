@@ -113,7 +113,7 @@ Modules are listed on the **Plugins** page (admin only). The catalogue lives in 
 - **Posted accounting entries are immutable.** Draft invoices can be deleted; posted invoices are voided with a reversing journal entry.
 - **Stock is a signed move ledger.** Receipts are positive, sales/issues negative, and `stock_levels` is updated in the same transaction. Overselling is rejected.
 - **Double entry is enforced:** every journal entry must have at least two lines and debits must equal credits.
-- **RBAC:** every route is guarded by `requirePermission('module.action')`; roles are seeded (`admin`, `accountant`, `sales`, `warehouse`, `hr`, `viewer`).
+- **RBAC:** every route is guarded by `requirePermission('module.action')`; roles are seeded (`admin`, `accountant`, `sales`, `warehouse`, `hr`, `workshop`, `employee`, `viewer`). Users can optionally be scoped to one branch; admins always see all branches.
 - **Audit trail:** mutating operations write to `audit_log`.
 
 ### Core flows
@@ -162,12 +162,18 @@ All endpoints are under `/api` and require `Authorization: Bearer <token>` excep
 | Inventory     | `/inventory/warehouses` CRUD, `/inventory/locations/:id`, `GET /inventory/stock`, `GET /inventory/stock/moves`, `POST /inventory/stock/adjust`                                                                                                                       |
 | Purchases     | `/purchase-orders` CRUD, `POST /:id/confirm`, `/cancel`, `/receive`, `GET /goods-receipts`                                                                                                                                                                           |
 | Sales         | `/sales-orders` CRUD, `POST /:id/confirm`, `/cancel`, `/fulfil`, `/invoice`                                                                                                                                                                                          |
+| Quotations    | `/quotations` CRUD, `POST /:id/status`, `POST /:id/convert`                                                                                                                                                                                                          |
 | Invoices      | `/invoices` CRUD/draft, `POST /:id/post`, `POST /:id/void`, `POST /from-purchase-order/:id`, `/payments`                                                                                                                                                             |
-| Accounting    | `/accounting/accounts` CRUD, `/journals`, `/journal-entries`, `/reports/{trial-balance,profit-and-loss,balance-sheet,ledger/:id,vat}`                                                                                                                                |
+| Credit notes  | `/credit-notes` list/detail, `POST /credit-notes` (posts a reversing entry)                                                                                                                                                                                          |
+| Accounting    | `/accounting/accounts` CRUD, `/journals`, `/journal-entries`, `/reports/{trial-balance,profit-and-loss,balance-sheet,ledger/:id,vat,aging}`                                                                                                                          |
+| Expenses      | `/expenses` CRUD, `/expenses/categories`, `POST /:id/post`, `POST /:id/void`                                                                                                                                                                                         |
+| Banking       | `/banking/accounts`, `/banking/transactions` + `POST /transactions/import`, `/banking/candidates`, `POST /transactions/:id/match` / `unmatch` / `ignore`, `GET /banking/summary`                                                                                     |
+| Imports       | `POST /imports/products`, `POST /imports/partners` (CSV, including Odoo column aliases)                                                                                                                                                                              |
 | HR            | `/employees` CRUD, `/departments` CRUD                                                                                                                                                                                                                               |
+| Attendance    | `/attendance` CRUD, `/attendance/employees`, `GET /attendance?from=&to=`                                                                                                                                                                                             |
 | Time Off      | `/leave/types`, `/leave/employees`, `/leave/requests` CRUD, `POST /leave/requests/:id/approve` / `reject` / `cancel`, `GET /leave/summary`                                                                                                                           |
 | Timesheets    | `/timesheets` CRUD, `/timesheets/employees`, `/timesheets/projects`, `POST /timesheets/:id/submit` / `approve` / `reject`, `GET /summary`                                                                                                                            |
-| Projects      | `/projects` CRUD, `/projects/:id/tasks` CRUD, `/projects/employees`                                                                                                                                                                                                  |
+| Projects      | `/projects` CRUD, `/projects/:id/tasks` CRUD, `/projects/:id/costs` CRUD, `/projects/employees`                                                                                                                                                                      |
 | Barcode       | `GET /barcode/lookup?code=…`, `GET /barcode/labels?q=…`                                                                                                                                                                                                              |
 | Maintenance   | `/maintenance/categories` CRUD, `/maintenance/equipment` CRUD, `/maintenance/requests` CRUD, `POST /requests/:id/status`, `GET /requests/summary`, `GET /technicians`                                                                                                |
 | Recruitment   | `/recruitment/jobs` CRUD, `/recruitment/candidates` CRUD, `/recruitment/applicants` CRUD, `POST /applicants/:id/hire`, `GET /stages`, `GET /options`                                                                                                                 |
@@ -186,13 +192,14 @@ Responses use a singular resource envelope, e.g. `{ "products": [...] }`, `{ "in
 - **Trading:** `partners`, `product_categories`, `tax_rates`, `products`
 - **Inventory:** `warehouses`, `stock_locations`, `stock_levels`, `stock_moves`
 - **Purchasing:** `purchase_orders`, `purchase_order_lines`, `goods_receipts`, `goods_receipt_lines`
-- **Sales:** `sales_orders`, `sales_order_lines`
-- **Invoicing:** `invoices`, `invoice_lines`, `payments`
-- **Accounting:** `accounts`, `journals`, `journal_entries`, `journal_items`
-- **HR:** `departments`, `employees`, `leave_types`, `leave_requests`
+- **Sales:** `sales_orders`, `sales_order_lines`, `quotations`, `quotation_lines`
+- **Invoicing:** `invoices`, `invoice_lines`, `payments`, `credit_notes`
+- **Accounting:** `accounts`, `journals`, `journal_entries`, `journal_items`, `expenses`, `bank_accounts`, `bank_transactions`
+- **HR:** `departments`, `employees`, `attendance`, `leave_types`, `leave_requests`
+- **Branch scoping:** `users.warehouse_id` restricts non-admin users to one warehouse
 - **Time Off:** `leave_types`, `leave_requests` (Time Off owns them; HR owns employees/departments)
 - **Timesheets:** `timesheets`
-- **Projects:** `projects`, `project_tasks`
+- **Projects:** `projects`, `project_tasks`, `project_costs`
 - **Maintenance:** `maintenance_equipment_categories`, `maintenance_equipment`, `maintenance_requests`
 - **Recruitment:** `recruitment_stages`, `recruitment_jobs`, `recruitment_candidates`, `recruitment_applicants`
 - **Manufacturing:** `manufacturing_boms`, `manufacturing_bom_lines`, `manufacturing_bom_operations`, `manufacturing_work_centers`, `manufacturing_operations`, `manufacturing_orders`, `manufacturing_order_components`, `manufacturing_order_operations`
@@ -206,7 +213,7 @@ Responses use a singular resource envelope, e.g. `{ "products": [...] }`, `{ "in
 npm test
 ```
 
-Tests run against `DB_PATH=:memory:` and cover auth/RBAC, the module registry, the end-to-end purchase → receive → bill and sale → fulfil → invoice → payment flow, the Wave 1 modules (projects, timesheets, time off, barcode), the Wave 2 modules (maintenance, recruitment including hire-to-employee), the Wave 3 modules (manufacturing BOM → production order → stock, and POS sale → invoice/payment/cash-up) and the Wave 4 modules (blogs and website public routes). Jest needs `NODE_OPTIONS=--experimental-vm-modules`; the `npm test` script already sets it.
+Tests run against `DB_PATH=:memory:` and cover auth/RBAC, the module registry, the end-to-end purchase → receive → bill and sale → fulfil → invoice → payment flow, quotations → sales order, credit notes, project costing, expenses, attendance, AR/AP aging, bank reconciliation and CSV import, the Wave 1 modules (projects, timesheets, time off, barcode), the Wave 2 modules (maintenance, recruitment including hire-to-employee), the Wave 3 modules (manufacturing BOM → production order → stock, and POS sale → invoice/payment/cash-up) and the Wave 4 modules (blogs and website public routes). Jest needs `NODE_OPTIONS=--experimental-vm-modules`; the `npm test` script already sets it.
 
 ## Limitations / next steps
 

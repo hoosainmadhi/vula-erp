@@ -5,6 +5,7 @@ export interface User {
   lastName: string;
   roles: string[];
   permissions: string[];
+  warehouseId: number | null;
 }
 
 export interface Partner {
@@ -305,6 +306,27 @@ export interface BalanceSheet {
   liabilityTotalCents: number;
   equityTotalCents: number;
   retainedEarningsCents: number;
+}
+
+export interface AgingBuckets {
+  current: number;
+  days1_30: number;
+  days31_60: number;
+  days61_90: number;
+  days90_plus: number;
+  total: number;
+}
+
+export interface AgingReport {
+  asOf: string;
+  direction: 'sale' | 'purchase';
+  partners: {
+    partner_id: number;
+    partner_name: string;
+    buckets: AgingBuckets;
+    invoices: number;
+  }[];
+  totals: AgingBuckets;
 }
 
 export interface LedgerLine {
@@ -1053,4 +1075,90 @@ export interface CreditNote {
   status: 'posted' | 'void';
   journal_entry_id: number | null;
   created_at: string;
+}
+
+export interface Expense {
+  id: number;
+  number: string;
+  expense_date: string;
+  category: string;
+  description: string;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  account_id: number | null;
+  account_code: string | null;
+  account_name: string | null;
+  amount_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  payment_method: 'bank' | 'cash' | 'card' | 'credit';
+  status: 'draft' | 'posted' | 'void';
+  journal_entry_id: number | null;
+  created_at: string;
+}
+
+export interface AttendanceRecord {
+  id: number;
+  employee_id: number;
+  employee_name: string;
+  employee_number: string;
+  work_date: string;
+  clock_in: string | null;
+  clock_out: string | null;
+  status: 'present' | 'late' | 'absent' | 'leave' | 'holiday';
+  hours: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface BankAccount {
+  id: number;
+  name: string;
+  bank_name: string | null;
+  account_number: string | null;
+  gl_account_id: number | null;
+  gl_account_code: string | null;
+  gl_account_name: string | null;
+  opening_balance_cents: number;
+  is_active: number;
+}
+
+export interface BankTransaction {
+  id: number;
+  bank_account_id: number;
+  transaction_date: string;
+  description: string;
+  reference: string | null;
+  amount_cents: number;
+  status: 'unreconciled' | 'reconciled' | 'ignored';
+  matched_journal_entry_id: number | null;
+  journal_number: string | null;
+  journal_description: string | null;
+}
+
+export interface BankCandidate {
+  journal_entry_id: number;
+  number: string;
+  entry_date: string;
+  description: string;
+  debit_cents: number;
+  credit_cents: number;
+  line_description: string | null;
+}
+
+export interface BankSummary {
+  openingBalanceCents: number;
+  statementBalanceCents: number;
+  reconciledBalanceCents: number;
+  unreconciledCents: number;
+  ledgerBalanceCents: number;
+  differenceCents: number;
+  transactions: number;
+}
+
+export interface ImportResult {
+  created: number;
+  updated: number;
+  total: number;
+  errors: string[];
 }

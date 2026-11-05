@@ -21,6 +21,7 @@ import {
 } from '../components/ui';
 import type {
   Account,
+  AgingReport,
   BalanceSheet,
   Journal,
   JournalEntry,
@@ -31,7 +32,7 @@ import type {
 } from '../types';
 
 type Tab = 'accounts' | 'journal' | 'reports';
-type ReportTab = 'trial' | 'pl' | 'balance' | 'vat';
+type ReportTab = 'trial' | 'pl' | 'balance' | 'vat' | 'aging';
 
 interface AccountLedgerResponse {
   account: { id: number; code: string; name: string; type: string };
@@ -547,6 +548,7 @@ function ReportsPanel() {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(monthEnd());
   const [asOf, setAsOf] = useState(today());
+  const [agingDirection, setAgingDirection] = useState<'sale' | 'purchase'>('sale');
 
   const trial = useFetch<{
     asOf: string;
@@ -565,6 +567,12 @@ function ReportsPanel() {
   const vat = useFetch<VatReport>(
     report === 'vat' ? `/accounting/reports/vat?from=${from}&to=${to}` : null,
     [from, to],
+  );
+  const aging = useFetch<AgingReport>(
+    report === 'aging'
+      ? `/accounting/reports/aging?asOf=${asOf}&direction=${agingDirection}`
+      : null,
+    [asOf, agingDirection],
   );
 
   const dateRange = (
@@ -609,6 +617,7 @@ function ReportsPanel() {
               ['pl', 'Profit & loss'],
               ['balance', 'Balance sheet'],
               ['vat', 'VAT'],
+              ['aging', 'Aging'],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -624,7 +633,19 @@ function ReportsPanel() {
           ))}
         </div>
         {report === 'pl' || report === 'vat' ? dateRange : null}
-        {report === 'trial' || report === 'balance' ? asOfField : null}
+        {report === 'trial' || report === 'balance' || report === 'aging' ? asOfField : null}
+        {report === 'aging' ? (
+          <Field label="Ledger" className="w-44">
+            <select
+              className={inputCls}
+              value={agingDirection}
+              onChange={(e) => setAgingDirection(e.target.value as 'sale' | 'purchase')}
+            >
+              <option value="sale">Receivables (AR)</option>
+              <option value="purchase">Payables (AP)</option>
+            </select>
+          </Field>
+        ) : null}
         <button
           type="button"
           className={btnSecondary}
@@ -633,6 +654,7 @@ function ReportsPanel() {
             pl.reload();
             balance.reload();
             vat.reload();
+            aging.reload();
           }}
         >
           Refresh
@@ -859,6 +881,89 @@ function ReportsPanel() {
                     ))
                   )}
                 </tbody>
+              </table>
+            </Card>
+          </div>
+        ) : null
+      ) : null}
+
+      {report === 'aging' ? (
+        aging.loading && !aging.data ? (
+          <Spinner />
+        ) : aging.error ? (
+          <ErrorBox message={aging.error} />
+        ) : aging.data ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card className="p-4">
+                <p className="text-xs uppercase text-slate-500">
+                  Total {aging.data.direction === 'sale' ? 'receivable' : 'payable'}
+                </p>
+                <p className="text-xl font-bold text-slate-900">{money(aging.data.totals.total)}</p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-xs uppercase text-slate-500">Current</p>
+                <p className="text-xl font-bold text-emerald-700">
+                  {money(aging.data.totals.current)}
+                </p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-xs uppercase text-slate-500">Overdue</p>
+                <p className="text-xl font-bold text-red-600">
+                  {money(aging.data.totals.total - aging.data.totals.current)}
+                </p>
+              </Card>
+            </div>
+            <Card className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-left text-sm">
+                <thead>
+                  <tr>
+                    <th className={thCls}>Partner</th>
+                    <th className={`${thCls} text-right`}>Current</th>
+                    <th className={`${thCls} text-right`}>1–30 days</th>
+                    <th className={`${thCls} text-right`}>31–60 days</th>
+                    <th className={`${thCls} text-right`}>61–90 days</th>
+                    <th className={`${thCls} text-right`}>90+ days</th>
+                    <th className={`${thCls} text-right`}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aging.data.partners.length === 0 ? (
+                    <EmptyState colSpan={7} message="Nothing outstanding at this date." />
+                  ) : (
+                    aging.data.partners.map((row) => (
+                      <tr key={row.partner_id} className="border-t border-slate-100">
+                        <td className={`${tdCls} font-medium text-slate-800`}>
+                          {row.partner_name}
+                          <span className="ml-2 text-xs text-slate-400">
+                            {row.invoices} invoice(s)
+                          </span>
+                        </td>
+                        <td className={`${tdCls} text-right`}>{money(row.buckets.current)}</td>
+                        <td className={`${tdCls} text-right`}>{money(row.buckets.days1_30)}</td>
+                        <td className={`${tdCls} text-right`}>{money(row.buckets.days31_60)}</td>
+                        <td className={`${tdCls} text-right`}>{money(row.buckets.days61_90)}</td>
+                        <td className={`${tdCls} text-right`}>{money(row.buckets.days90_plus)}</td>
+                        <td className={`${tdCls} text-right font-semibold`}>
+                          {money(row.buckets.total)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 font-bold">
+                    <td className={tdCls}>Total</td>
+                    <td className={`${tdCls} text-right`}>{money(aging.data.totals.current)}</td>
+                    <td className={`${tdCls} text-right`}>{money(aging.data.totals.days1_30)}</td>
+                    <td className={`${tdCls} text-right`}>{money(aging.data.totals.days31_60)}</td>
+                    <td className={`${tdCls} text-right`}>{money(aging.data.totals.days61_90)}</td>
+                    <td className={`${tdCls} text-right`}>
+                      {money(aging.data.totals.days90_plus)}
+                    </td>
+                    <td className={`${tdCls} text-right`}>{money(aging.data.totals.total)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </Card>
           </div>

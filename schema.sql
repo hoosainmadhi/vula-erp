@@ -20,6 +20,7 @@ CREATE TABLE users (
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+  warehouse_id INTEGER REFERENCES warehouses(id) ON DELETE SET NULL,
   last_login_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -1005,3 +1006,69 @@ CREATE TABLE project_costs (
 );
 
 CREATE INDEX ix_project_costs_project ON project_costs(project_id);
+
+-- Expenses: day-to-day operating costs, optionally posted to the ledger
+CREATE TABLE expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  number TEXT NOT NULL UNIQUE,
+  expense_date TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL,
+  supplier_id INTEGER REFERENCES partners(id) ON DELETE SET NULL,
+  account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+  amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (amount_cents >= 0),
+  tax_cents INTEGER NOT NULL DEFAULT 0 CHECK (tax_cents >= 0),
+  total_cents INTEGER NOT NULL DEFAULT 0 CHECK (total_cents >= 0),
+  payment_method TEXT NOT NULL DEFAULT 'bank' CHECK (payment_method IN ('bank', 'cash', 'card', 'credit')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'posted', 'void')),
+  journal_entry_id INTEGER REFERENCES journal_entries(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX ix_expenses_date ON expenses(expense_date);
+CREATE INDEX ix_expenses_category ON expenses(category);
+
+-- Attendance: one row per employee per work day
+CREATE TABLE attendance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  work_date TEXT NOT NULL,
+  clock_in TEXT,
+  clock_out TEXT,
+  status TEXT NOT NULL DEFAULT 'present' CHECK (status IN ('present', 'late', 'absent', 'leave', 'holiday')),
+  hours REAL NOT NULL DEFAULT 0 CHECK (hours >= 0),
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (employee_id, work_date)
+);
+
+CREATE INDEX ix_attendance_date ON attendance(work_date);
+
+-- Bank reconciliation: statement lines matched to posted journal entries
+CREATE TABLE bank_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  bank_name TEXT,
+  account_number TEXT,
+  gl_account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+  opening_balance_cents INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE bank_transactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bank_account_id INTEGER NOT NULL REFERENCES bank_accounts(id) ON DELETE CASCADE,
+  transaction_date TEXT NOT NULL,
+  description TEXT NOT NULL,
+  reference TEXT,
+  amount_cents INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'unreconciled' CHECK (status IN ('unreconciled', 'reconciled', 'ignored')),
+  matched_journal_entry_id INTEGER REFERENCES journal_entries(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX ix_bank_transactions_account ON bank_transactions(bank_account_id, status);
+CREATE INDEX ix_bank_transactions_date ON bank_transactions(transaction_date);

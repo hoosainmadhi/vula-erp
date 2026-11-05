@@ -1,6 +1,11 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
-import { authenticate, requirePermission } from '../middleware/auth.js';
+import {
+  authenticate,
+  branchWarehouseId,
+  effectiveWarehouseId,
+  requirePermission,
+} from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
 import { ValidationError, notFound } from '../utils/errors.js';
 import {
@@ -139,6 +144,11 @@ purchasesRouter.get(
       where.push('po.warehouse_id = ?');
       params.push(Number(req.query.warehouseId));
     }
+    const branchScope = branchWarehouseId(req.user!);
+    if (branchScope !== null) {
+      where.push('po.warehouse_id = ?');
+      params.push(branchScope);
+    }
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (q) {
       where.push('(po.number LIKE ? OR p.name LIKE ?)');
@@ -253,7 +263,8 @@ purchasesRouter.post(
         .run(
           number,
           supplierId,
-          optionalInt(req.body?.warehouseId, 'Branch', 1) ?? defaultWarehouseId(),
+          effectiveWarehouseId(req.user!, optionalInt(req.body?.warehouseId, 'Branch', 1)) ??
+            defaultWarehouseId(),
           requireDate(req.body?.orderDate, 'Order date'),
           optionalDate(req.body?.expectedDate, 'Expected date'),
           subtotal,
@@ -316,9 +327,12 @@ purchasesRouter.put(
            updated_at = datetime('now') WHERE id = ?`,
       ).run(
         supplierId,
-        req.body?.warehouseId === undefined
-          ? (existing.warehouse_id as number | null)
-          : optionalInt(req.body.warehouseId, 'Branch', 1),
+        effectiveWarehouseId(
+          req.user!,
+          req.body?.warehouseId === undefined
+            ? (existing.warehouse_id as number | null)
+            : optionalInt(req.body.warehouseId, 'Branch', 1),
+        ),
         req.body?.orderDate === undefined
           ? existing.order_date
           : requireDate(req.body.orderDate, 'Order date'),

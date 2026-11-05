@@ -32,6 +32,9 @@ The host proxy on port 3290 routes:
 - 7 sales orders (draft, confirmed, fulfilled, invoiced)
 - 22 invoices, 20 payments and 42 journal entries across June–November 2026
 - 6 employees across Management, Sales, Finance and Workshop
+- Attendance register for the last three working days
+- 5 operating expenses (rent, utilities, transport, consumables, repairs)
+- 1 bank account with 5 statement lines ready to reconcile
 - 3 projects: Sandton kitchen renovation, Rosebank walk-in wardrobe, East London office fit-out
 - 1 BOM and 4 manufacturing orders for a cut-and-edge workshop job
 - 2 POS registers — Johannesburg and Eastern Cape
@@ -76,10 +79,16 @@ the company dashboard or other employees’ leave.
 3. Inventory — stock by JHB and EC
 4. Purchase orders — draft, confirmed, received
 5. Sales orders — draft, confirmed, fulfilled, invoiced
-6. Projects — kitchen, wardrobe and office fit-out jobs
-7. Manufacturing — cut-and-edge BOM and production orders
-8. POS — open session, counter sale, cash-up
-9. Public site — `/site` and `/blog`
+6. Quotations — branded quote, print/PDF, convert to a sales order
+7. Invoices — credit note against an invoice, AR/AP aging under Accounting → Reports
+8. Expenses — capture and post an operating cost
+9. Bank reconciliation — match a statement line to a posted ledger entry
+10. Projects — kitchen, wardrobe and office fit-out jobs, costs and margin
+11. Attendance — daily register and clock-in/out
+12. Manufacturing — cut-and-edge BOM and production orders
+13. POS — open session, counter sale, cash-up
+14. Data import — paste a product or partner CSV (Odoo column names work)
+15. Public site — `/site` and `/blog`
 
 ## Run / restart
 
@@ -100,15 +109,15 @@ This starts both demo backends and the host proxy. Logs:
 cd ~/apps/vula-erp
 rm -f data/jabulani-demo.db data/jabulani-demo.db-shm data/jabulani-demo.db-wal
 DB_PATH=data/jabulani-demo.db npx tsx scripts/seed-jabulani.ts
+DB_PATH=data/jabulani-demo.db npx tsx scripts/seed-demo-extras.ts
 ```
 
 ## Honest caveats
 
 - This is a **foundation demo**, not a finished Odoo replacement.
-- Products are flat SKUs; brand/colour/size/thickness are in the description, not
-  variants or attributes.
-- The workshop is modelled with the Manufacturing module (BOM + production orders),
-  not a dedicated cutting-list/edge-banding job-card workflow yet.
-- Quotes, credit notes, bank reconciliation and purchase/sales price lists are not
-  implemented.
+- Products are flat SKUs with brand/colour/size/thickness fields, not full variants.
+- The workshop has a dedicated job-card workflow; the Manufacturing module still
+  exists separately for BOMs and production orders.
+- Bank reconciliation matches statement lines to posted journal entries; it does
+  not import OFX/QIF or auto-suggest matches yet.
 - The public site is a CMS, not an e-commerce storefront.

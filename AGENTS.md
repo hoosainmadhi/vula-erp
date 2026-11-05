@@ -63,13 +63,16 @@ dashboard.view
 users.manage
 settings.manage
 modules.manage
+data.import
 partners.view | partners.manage
 products.view | products.manage | inventory.adjust
 purchases.view | purchases.manage
 sales.view | sales.manage
 invoices.view | invoices.manage
 accounting.view | accounting.manage
+expenses.view | expenses.manage
 hr.view | hr.manage
+attendance.view | attendance.manage
 projects.view | projects.manage
 maintenance.view | maintenance.manage
 recruitment.view | recruitment.manage

@@ -80,6 +80,11 @@ The container entrypoint seeds the database on first boot when `DB_PATH` does
 not exist. The seed scripts are compiled to `dist/scripts/seed-africoach.js` and
 `dist/scripts/seed-jabulani.js`.
 
+On every boot the entrypoint also runs `dist/scripts/seed-demo-extras.js` when
+`SEED_SCRIPT` is set. It is idempotent and only adds the newer demo tables
+(expenses, attendance, bank reconciliation) when they are empty, so existing
+volumes pick up new modules without being wiped.
+
 ## Redeploy
 
 Coolify auto-deploy is off. Redeploy from the Coolify UI, or:

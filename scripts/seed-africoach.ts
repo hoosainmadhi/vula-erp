@@ -3,6 +3,7 @@ import { closeDb, getDb } from '../src/db.js';
 import { nextNumber } from '../src/services/sequences.js';
 import { recordMove, receivePurchaseOrder, fulfilSalesOrder } from '../src/services/stock.js';
 import { createInvoice, recordPayment } from '../src/services/invoices.js';
+import { accountByCode } from '../src/services/accounting.js';
 import { lineTotals } from '../src/utils/money.js';
 import { addDays } from '../src/utils/dates.js';
 
@@ -1310,6 +1311,98 @@ function seedPos(adminId: number, locationId: number): void {
   );
 }
 
+function seedOperations(adminId: number): void {
+  const expenseCount = db.prepare('SELECT COUNT(*) AS count FROM expenses').get() as {
+    count: number;
+  };
+  if (expenseCount.count === 0) {
+    const insertExpense = db.prepare(
+      `INSERT INTO expenses
+         (number, expense_date, category, description, amount_cents, tax_cents, total_cents,
+          payment_method, status, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const expenses: [string, string, number, string, string][] = [
+      ['2026-10-01', 'Rent', 2_400_000, 'bank', 'Factory and showroom rent — October'],
+      ['2026-10-04', 'Utilities', 510_000, 'bank', 'Electricity and water — October'],
+      ['2026-10-09', 'Transport', 210_000, 'card', 'Coach deliveries to Gauteng depots'],
+      ['2026-10-18', 'Consumables', 132_000, 'cash', 'Adhesives, trims and upholstery supplies'],
+      ['2026-10-26', 'Marketing', 350_000, 'bank', 'Trade show and brochure print run'],
+    ];
+    for (const [date, category, net, method, description] of expenses) {
+      const tax = Math.round(net * 0.15);
+      insertExpense.run(
+        nextNumber('expense'),
+        date,
+        category,
+        description,
+        net,
+        tax,
+        net + tax,
+        method,
+        'draft',
+        adminId,
+      );
+    }
+  }
+
+  const attendanceCount = db.prepare('SELECT COUNT(*) AS count FROM attendance').get() as {
+    count: number;
+  };
+  if (attendanceCount.count === 0) {
+    const employees = db
+      .prepare("SELECT id, email FROM employees WHERE status <> 'terminated'")
+      .all() as { id: number; email: string | null }[];
+    const insertAttendance = db.prepare(
+      `INSERT OR IGNORE INTO attendance
+         (employee_id, work_date, clock_in, clock_out, status, hours)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    for (const employee of employees) {
+      ['2026-11-03', '2026-11-04', '2026-11-05'].forEach((date, index) => {
+        const late = index === 2 && employee.email === 'thandi@africoach.local';
+        insertAttendance.run(
+          employee.id,
+          date,
+          late ? '08:18' : '07:50',
+          '16:45',
+          late ? 'late' : 'present',
+          8.5,
+        );
+      });
+    }
+  }
+
+  const bankCount = db.prepare('SELECT COUNT(*) AS count FROM bank_accounts').get() as {
+    count: number;
+  };
+  if (bankCount.count === 0) {
+    const bank = accountByCode('1000');
+    const result = db
+      .prepare(
+        `INSERT INTO bank_accounts (name, bank_name, account_number, gl_account_id, opening_balance_cents)
+         VALUES ('Standard Bank Current', 'Standard Bank', '04210098765', ?, ?)`,
+      )
+      .run(bank.id, 18_000_000);
+    const bankAccountId = Number(result.lastInsertRowid);
+    const insertTransaction = db.prepare(
+      `INSERT INTO bank_transactions
+         (bank_account_id, transaction_date, description, reference, amount_cents)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    const transactions: [string, string, string, number][] = [
+      ['2026-10-29', 'EFT — Mega Coaches', 'INV-00018', 3_450_000],
+      ['2026-10-31', 'EFT — City of Joburg', 'COJ-OCT', -612_000],
+      ['2026-11-01', 'Bank charges', 'SB-FEE', -21_000],
+      ['2026-11-03', 'Card settlement', 'POS-BATCH', 980_000],
+      ['2026-11-04', 'EFT — Gauteng Coach Lines', 'INV-00019', 1_275_000],
+    ];
+    for (const [date, description, reference, amount] of transactions) {
+      insertTransaction.run(bankAccountId, date, description, reference, amount);
+    }
+  }
+}
+
 function main(): void {
   const adminId = createUser('admin@africoach.local', 'Africoach', 'Admin', 'admin');
   const salesUserId = createUser('sales@africoach.local', 'Yusuf', 'Sales', 'sales');
@@ -1800,6 +1893,7 @@ function main(): void {
   seedHistoricalInvoices(adminId);
   seedPos(adminId, locations.jhb);
   seedWebsite(adminId);
+  seedOperations(adminId);
 
   console.log('Africoach demo data ready.');
   console.log(`Login: admin@africoach.local / ${PASSWORD}`);

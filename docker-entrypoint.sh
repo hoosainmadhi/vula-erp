@@ -11,4 +11,9 @@ if [ ! -f "$DB_PATH" ] && [ -n "${SEED_SCRIPT:-}" ]; then
   node "dist/scripts/${SEED_SCRIPT}.js"
 fi
 
+# Idempotent: adds expenses, attendance and bank data to existing demo volumes.
+if [ -n "${SEED_SCRIPT:-}" ] && [ -f "dist/scripts/seed-demo-extras.js" ]; then
+  node dist/scripts/seed-demo-extras.js
+fi
+
 exec node dist/server.js

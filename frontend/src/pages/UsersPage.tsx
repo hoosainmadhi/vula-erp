@@ -20,7 +20,7 @@ import {
   tdCls,
   thCls,
 } from '../components/ui';
-import type { AuditEntry, Permission, Role } from '../types';
+import type { AuditEntry, Permission, Role, Warehouse } from '../types';
 
 type Tab = 'users' | 'roles' | 'audit';
 
@@ -30,6 +30,7 @@ interface ManagedUser {
   first_name: string;
   last_name: string;
   is_active: number;
+  warehouse_id: number | null;
   last_login_at: string | null;
   created_at: string;
   roles: string[];
@@ -43,11 +44,13 @@ interface RolesResponse {
 function UserForm({
   user,
   roles,
+  warehouses,
   onSaved,
   onClose,
 }: {
   user: ManagedUser | null;
   roles: Role[];
+  warehouses: Warehouse[];
   onSaved: () => void;
   onClose: () => void;
 }) {
@@ -56,6 +59,7 @@ function UserForm({
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [password, setPassword] = useState('');
   const [isActive, setIsActive] = useState(user ? user.is_active === 1 : true);
+  const [warehouseId, setWarehouseId] = useState(String(user?.warehouse_id ?? ''));
   const [selected, setSelected] = useState<string[]>(user?.roles ?? ['viewer']);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -77,10 +81,18 @@ function UserForm({
           lastName,
           isActive,
           roles: selected,
+          warehouseId: warehouseId ? Number(warehouseId) : null,
           ...(password ? { password } : {}),
         });
       } else {
-        await api.post('/users', { email, firstName, lastName, password, roles: selected });
+        await api.post('/users', {
+          email,
+          firstName,
+          lastName,
+          password,
+          roles: selected,
+          warehouseId: warehouseId ? Number(warehouseId) : null,
+        });
       }
       onSaved();
       onClose();
@@ -155,6 +167,20 @@ function UserForm({
           ))}
         </div>
       </div>
+      <Field label="Branch scope" hint="Restricts this user to one branch; admins always see all.">
+        <select
+          className={inputCls}
+          value={warehouseId}
+          onChange={(e) => setWarehouseId(e.target.value)}
+        >
+          <option value="">All branches</option>
+          {warehouses.map((warehouse) => (
+            <option key={warehouse.id} value={warehouse.id}>
+              {warehouse.name}
+            </option>
+          ))}
+        </select>
+      </Field>
       {user ? (
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input
@@ -296,6 +322,7 @@ export default function UsersPage() {
 
   const users = useFetch<{ users: ManagedUser[] }>('/users');
   const roles = useFetch<RolesResponse>('/roles');
+  const warehouses = useFetch<{ warehouses: Warehouse[] }>('/inventory/warehouses');
   const audit = useFetch<{ audit: AuditEntry[] }>(tab === 'audit' ? '/audit?limit=200' : null);
 
   const removeUser = async (user: ManagedUser) => {
@@ -563,6 +590,7 @@ export default function UsersPage() {
           <UserForm
             user={userModal === 'new' ? null : userModal}
             roles={roles.data?.roles ?? []}
+            warehouses={warehouses.data?.warehouses ?? []}
             onSaved={users.reload}
             onClose={() => setUserModal(null)}
           />

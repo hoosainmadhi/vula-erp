@@ -1365,6 +1365,99 @@ function seedWebsite(adminId: number): void {
   }
 }
 
+function seedOperations(adminId: number): void {
+  const expenseCount = db.prepare('SELECT COUNT(*) AS count FROM expenses').get() as {
+    count: number;
+  };
+  if (expenseCount.count === 0) {
+    const insertExpense = db.prepare(
+      `INSERT INTO expenses
+         (number, expense_date, category, description, amount_cents, tax_cents, total_cents,
+          payment_method, status, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const expenses: [string, string, number, string, string][] = [
+      ['2026-10-01', 'Rent', 1_800_000, 'bank', 'Workshop and yard rent — October'],
+      ['2026-10-03', 'Utilities', 420_000, 'bank', 'City Power and water — October'],
+      ['2026-10-08', 'Transport', 185_000, 'card', 'Deliveries to Rosebank and Sandton sites'],
+      ['2026-10-15', 'Consumables', 96_500, 'cash', 'Glue, screws and workshop consumables'],
+      ['2026-10-25', 'Repairs', 240_000, 'bank', 'Edgebander service and blade replacement'],
+    ];
+    for (const [date, category, net, method, description] of expenses) {
+      const tax = Math.round(net * 0.15);
+      insertExpense.run(
+        nextNumber('expense'),
+        date,
+        category,
+        description,
+        net,
+        tax,
+        net + tax,
+        method,
+        'draft',
+        adminId,
+      );
+    }
+  }
+
+  const attendanceCount = db.prepare('SELECT COUNT(*) AS count FROM attendance').get() as {
+    count: number;
+  };
+  if (attendanceCount.count === 0) {
+    const employees = db
+      .prepare("SELECT id, email FROM employees WHERE status <> 'terminated'")
+      .all() as { id: number; email: string | null }[];
+    const insertAttendance = db.prepare(
+      `INSERT OR IGNORE INTO attendance
+         (employee_id, work_date, clock_in, clock_out, status, hours)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    const days = ['2026-11-03', '2026-11-04', '2026-11-05'];
+    for (const employee of employees) {
+      days.forEach((date, index) => {
+        const late = index === 1 && employee.email === 'thabo@jabulani.local';
+        insertAttendance.run(
+          employee.id,
+          date,
+          late ? '08:22' : '07:55',
+          '17:05',
+          late ? 'late' : 'present',
+          9,
+        );
+      });
+    }
+  }
+
+  const bankCount = db.prepare('SELECT COUNT(*) AS count FROM bank_accounts').get() as {
+    count: number;
+  };
+  if (bankCount.count === 0) {
+    const bank = accountByCode('1000');
+    const result = db
+      .prepare(
+        `INSERT INTO bank_accounts (name, bank_name, account_number, gl_account_id, opening_balance_cents)
+         VALUES ('FNB Business Current', 'FNB', '62710001234', ?, ?)`,
+      )
+      .run(bank.id, 25_000_000);
+    const bankAccountId = Number(result.lastInsertRowid);
+    const insertTransaction = db.prepare(
+      `INSERT INTO bank_transactions
+         (bank_account_id, transaction_date, description, reference, amount_cents)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    const transactions: [string, string, string, number][] = [
+      ['2026-10-28', 'EFT — Highveld Shopfitters', 'INV-00021', 2_150_000],
+      ['2026-10-30', 'EFT — Sandton Interiors', 'INV-00022', 890_000],
+      ['2026-11-01', 'Bank charges', 'FNB-FEE', -18_500],
+      ['2026-11-02', 'EFT — City Power', 'ELEC-OCT', -483_000],
+      ['2026-11-04', 'Card settlement', 'POS-BATCH', 1_245_000],
+    ];
+    for (const [date, description, reference, amount] of transactions) {
+      insertTransaction.run(bankAccountId, date, description, reference, amount);
+    }
+  }
+}
+
 function main(): void {
   const adminId = createUser('admin@jabulani.local', 'Jabulani', 'Admin', 'admin');
   const salesUserId = createUser('sales@jabulani.local', 'Thabo', 'Sales', 'sales');
@@ -1775,6 +1868,7 @@ function main(): void {
   seedManufacturing(adminId, locations.jhb);
   seedPos(adminId, locations.jhb);
   seedWebsite(adminId);
+  seedOperations(adminId);
 
   console.log('Jabulani Boards demo data ready.');
   console.log(`Login: admin@jabulani.local / ${PASSWORD}`);

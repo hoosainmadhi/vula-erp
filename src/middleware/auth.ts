@@ -11,6 +11,7 @@ export interface AuthUser {
   lastName: string;
   roles: string[];
   permissions: string[];
+  warehouseId: number | null;
 }
 
 declare module 'express-serve-static-core' {
@@ -25,12 +26,15 @@ interface UserRow {
   first_name: string;
   last_name: string;
   is_active: number;
+  warehouse_id: number | null;
 }
 
 export function loadUser(id: number): AuthUser | null {
   const db = getDb();
   const user = db
-    .prepare('SELECT id, email, first_name, last_name, is_active FROM users WHERE id = ?')
+    .prepare(
+      'SELECT id, email, first_name, last_name, is_active, warehouse_id FROM users WHERE id = ?',
+    )
     .get(id) as UserRow | undefined;
   if (!user || user.is_active !== 1) return null;
 
@@ -60,6 +64,7 @@ export function loadUser(id: number): AuthUser | null {
     lastName: user.last_name,
     roles: roles.map((r) => r.name),
     permissions: permissions.map((p) => p.key),
+    warehouseId: user.warehouse_id ?? null,
   };
 }
 
@@ -103,6 +108,25 @@ export function requirePermission(permission: string): RequestHandler {
     }
     next();
   };
+}
+
+/**
+ * Branch scope for a user. Admins see every branch; any other user with a
+ * warehouse assigned is restricted to it. Returns null when unscoped.
+ */
+export function branchWarehouseId(user: AuthUser): number | null {
+  if (user.roles.includes('admin')) return null;
+  return user.warehouseId;
+}
+
+/** Force the user's branch when scoped, otherwise honour the requested branch. */
+export function effectiveWarehouseId(
+  user: AuthUser,
+  requested: number | null | undefined,
+): number | null {
+  const scope = branchWarehouseId(user);
+  if (scope !== null) return scope;
+  return requested ?? null;
 }
 
 export function requireRole(role: string): RequestHandler {
@@ -166,5 +190,6 @@ export function publicUser(user: AuthUser) {
     lastName: user.lastName,
     roles: user.roles,
     permissions: user.permissions,
+    warehouseId: user.warehouseId,
   };
 }

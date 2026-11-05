@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+  warehouse_id INTEGER REFERENCES warehouses(id) ON DELETE SET NULL,
   last_login_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -686,6 +687,72 @@ CREATE TABLE IF NOT EXISTS project_costs (
 
 CREATE INDEX IF NOT EXISTS ix_project_costs_project ON project_costs(project_id);
 
+-- Expenses: day-to-day operating costs, optionally posted to the ledger
+CREATE TABLE IF NOT EXISTS expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  number TEXT NOT NULL UNIQUE,
+  expense_date TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL,
+  supplier_id INTEGER REFERENCES partners(id) ON DELETE SET NULL,
+  account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+  amount_cents INTEGER NOT NULL DEFAULT 0 CHECK (amount_cents >= 0),
+  tax_cents INTEGER NOT NULL DEFAULT 0 CHECK (tax_cents >= 0),
+  total_cents INTEGER NOT NULL DEFAULT 0 CHECK (total_cents >= 0),
+  payment_method TEXT NOT NULL DEFAULT 'bank' CHECK (payment_method IN ('bank', 'cash', 'card', 'credit')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'posted', 'void')),
+  journal_entry_id INTEGER REFERENCES journal_entries(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS ix_expenses_date ON expenses(expense_date);
+CREATE INDEX IF NOT EXISTS ix_expenses_category ON expenses(category);
+
+-- Bank reconciliation: statement lines matched to posted journal entries
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  bank_name TEXT,
+  account_number TEXT,
+  gl_account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+  opening_balance_cents INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS bank_transactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bank_account_id INTEGER NOT NULL REFERENCES bank_accounts(id) ON DELETE CASCADE,
+  transaction_date TEXT NOT NULL,
+  description TEXT NOT NULL,
+  reference TEXT,
+  amount_cents INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'unreconciled' CHECK (status IN ('unreconciled', 'reconciled', 'ignored')),
+  matched_journal_entry_id INTEGER REFERENCES journal_entries(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS ix_bank_transactions_account ON bank_transactions(bank_account_id, status);
+CREATE INDEX IF NOT EXISTS ix_bank_transactions_date ON bank_transactions(transaction_date);
+
+-- Attendance: one row per employee per work day
+CREATE TABLE IF NOT EXISTS attendance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  work_date TEXT NOT NULL,
+  clock_in TEXT,
+  clock_out TEXT,
+  status TEXT NOT NULL DEFAULT 'present' CHECK (status IN ('present', 'late', 'absent', 'leave', 'holiday')),
+  hours REAL NOT NULL DEFAULT 0 CHECK (hours >= 0),
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (employee_id, work_date)
+);
+
+CREATE INDEX IF NOT EXISTS ix_attendance_date ON attendance(work_date);
+
 -- Manufacturing: bills of materials, work centers, operations and production orders
 CREATE TABLE IF NOT EXISTS manufacturing_work_centers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1047,6 +1114,18 @@ export const MIGRATIONS: readonly { version: number; name: string; run: (db: Db)
       }
     },
   },
+  {
+    version: 5,
+    name: 'user_branch_scope',
+    run: (db) => {
+      const columns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+      if (!columns.some((column) => column.name === 'warehouse_id')) {
+        db.exec(
+          'ALTER TABLE users ADD COLUMN warehouse_id INTEGER REFERENCES warehouses(id) ON DELETE SET NULL',
+        );
+      }
+    },
+  },
 ];
 
 let db: Db | null = null;
@@ -1197,6 +1276,13 @@ export const MODULES: readonly ModuleDefinition[] = [
     isCore: false,
   },
   {
+    key: 'expenses',
+    name: 'Expenses',
+    description: 'Operating expenses, categories and ledger posting',
+    category: 'Finance',
+    isCore: false,
+  },
+  {
     key: 'hr',
     name: 'Human Resources',
     description: 'Employees and departments',
@@ -1214,6 +1300,13 @@ export const MODULES: readonly ModuleDefinition[] = [
     key: 'timesheets',
     name: 'Timesheets',
     description: 'Employee work-hour tracking and approvals',
+    category: 'People',
+    isCore: false,
+  },
+  {
+    key: 'attendance',
+    name: 'Attendance',
+    description: 'Daily clock-in, clock-out and attendance register',
     category: 'People',
     isCore: false,
   },
@@ -1294,6 +1387,7 @@ export const PERMISSIONS: readonly { key: string; module: string; description: s
   { key: 'users.manage', module: 'core', description: 'Manage users and roles' },
   { key: 'settings.manage', module: 'core', description: 'Manage company settings' },
   { key: 'modules.manage', module: 'core', description: 'Enable and disable modules' },
+  { key: 'data.import', module: 'core', description: 'Import products and partners from CSV' },
   { key: 'partners.view', module: 'partners', description: 'View customers and suppliers' },
   {
     key: 'partners.manage',
@@ -1319,8 +1413,20 @@ export const PERMISSIONS: readonly { key: string; module: string; description: s
   },
   { key: 'accounting.view', module: 'accounting', description: 'View ledger and trial balance' },
   { key: 'accounting.manage', module: 'accounting', description: 'Post journal entries' },
+  { key: 'expenses.view', module: 'expenses', description: 'View operating expenses' },
+  { key: 'expenses.manage', module: 'expenses', description: 'Capture and post expenses' },
   { key: 'hr.view', module: 'hr', description: 'View employees and leave' },
   { key: 'hr.manage', module: 'hr', description: 'Manage employees and leave' },
+  {
+    key: 'attendance.view',
+    module: 'attendance',
+    description: 'View the attendance register',
+  },
+  {
+    key: 'attendance.manage',
+    module: 'attendance',
+    description: 'Record and edit attendance',
+  },
   {
     key: 'leave.self',
     module: 'time-off',
@@ -1389,7 +1495,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'invoices.manage',
     'accounting.view',
     'accounting.manage',
+    'expenses.view',
+    'expenses.manage',
     'projects.view',
+    'data.import',
   ],
   sales: [
     'dashboard.view',
@@ -1416,11 +1525,14 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'maintenance.manage',
     'manufacturing.view',
     'manufacturing.manage',
+    'data.import',
   ],
   hr: [
     'dashboard.view',
     'hr.view',
     'hr.manage',
+    'attendance.view',
+    'attendance.manage',
     'projects.view',
     'recruitment.view',
     'recruitment.manage',
@@ -1436,7 +1548,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'sales.view',
     'invoices.view',
     'accounting.view',
+    'expenses.view',
     'hr.view',
+    'attendance.view',
     'projects.view',
     'maintenance.view',
     'recruitment.view',
@@ -1491,6 +1605,7 @@ const SEQUENCES: readonly [string, string][] = [
   ['workshop_job', 'WS'],
   ['quotation', 'QT'],
   ['credit_note', 'CRN'],
+  ['expense', 'EXP'],
 ];
 
 export function ensureReferenceData(instance: Db): void {

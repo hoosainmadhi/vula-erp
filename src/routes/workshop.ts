@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db.js';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
-import { ValidationError, notFound } from '../utils/errors.js';
+import { ValidationError, HttpError, notFound } from '../utils/errors.js';
 import {
   optionalCents,
   optionalDate,
@@ -45,16 +45,31 @@ interface JobRow {
   status: string;
   invoice_id: number | null;
   payment_required: number;
+  assigned_to: number | null;
+  created_by: number | null;
 }
 
 function jobRow(id: number): JobRow {
   const job = getDb()
     .prepare(
-      'SELECT id, number, status, invoice_id, payment_required FROM workshop_jobs WHERE id = ?',
+      `SELECT id, number, status, invoice_id, payment_required, assigned_to, created_by
+       FROM workshop_jobs WHERE id = ?`,
     )
     .get(id) as JobRow | undefined;
   if (!job) throw notFound('Workshop job not found');
   return job;
+}
+
+/** Workshop staff only see unassigned jobs or jobs assigned to them. */
+function workshopScoped(user: { id: number; roles: string[] }): boolean {
+  return user.roles.includes('workshop') && !user.roles.includes('admin');
+}
+
+function assertJobAccess(job: JobRow, user: { id: number; roles: string[] }): void {
+  if (!workshopScoped(user)) return;
+  if (job.assigned_to !== null && job.assigned_to !== user.id) {
+    throw new HttpError(403, 'This job is assigned to another workshop user', 'forbidden');
+  }
 }
 
 function assertPaid(job: JobRow): void {
@@ -138,6 +153,10 @@ workshopRouter.get(
       where.push('j.assigned_to = ?');
       params.push(Number(req.query.assignedTo));
     }
+    if (workshopScoped(req.user!)) {
+      where.push('(j.assigned_to IS NULL OR j.assigned_to = ?)');
+      params.push(req.user!.id);
+    }
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (q) {
       where.push('(j.number LIKE ? OR j.title LIKE ? OR p.name LIKE ?)');
@@ -154,7 +173,9 @@ workshopRouter.get(
   '/jobs/:id',
   requirePermission('workshop.view'),
   asyncHandler(async (req, res) => {
-    res.json({ job: jobDetail(paramId(req.params.id)) });
+    const id = paramId(req.params.id);
+    assertJobAccess(jobRow(id), req.user!);
+    res.json({ job: jobDetail(id) });
   }),
 );
 
@@ -298,6 +319,7 @@ workshopRouter.post(
   asyncHandler(async (req, res) => {
     const id = paramId(req.params.id);
     const job = jobRow(id);
+    assertJobAccess(job, req.user!);
     if (job.status !== 'awaiting_payment') {
       throw new ValidationError('Only jobs awaiting payment can be released');
     }
@@ -319,6 +341,7 @@ workshopRouter.post(
     const id = paramId(req.params.id);
     const operationId = paramId(req.params.operationId, 'operation id');
     const job = jobRow(id);
+    assertJobAccess(job, req.user!);
     if (job.status !== 'queued' && job.status !== 'in_progress') {
       throw new ValidationError('Release the job before starting operations');
     }
@@ -377,6 +400,7 @@ workshopRouter.post(
   asyncHandler(async (req, res) => {
     const id = paramId(req.params.id);
     const job = jobRow(id);
+    assertJobAccess(job, req.user!);
     if (job.status !== 'ready') {
       throw new ValidationError('Only ready jobs can be collected');
     }
@@ -396,6 +420,7 @@ workshopRouter.post(
   asyncHandler(async (req, res) => {
     const id = paramId(req.params.id);
     const job = jobRow(id);
+    assertJobAccess(job, req.user!);
     if (job.status === 'collected') throw new ValidationError('Collected jobs cannot be cancelled');
     getDb()
       .prepare(
@@ -413,6 +438,7 @@ workshopRouter.delete(
   asyncHandler(async (req, res) => {
     const id = paramId(req.params.id);
     const job = jobRow(id);
+    assertJobAccess(job, req.user!);
     if (job.status === 'collected') throw new ValidationError('Collected jobs cannot be deleted');
     getDb().prepare('DELETE FROM workshop_jobs WHERE id = ?').run(id);
     recordAudit(req.user!.id, 'delete', 'workshop_job', id);

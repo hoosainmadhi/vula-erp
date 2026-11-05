@@ -26,6 +26,10 @@ import { websiteRouter, publicWebsiteRouter } from './website.js';
 import { workshopRouter } from './workshop.js';
 import { quotationsRouter } from './quotations.js';
 import { creditNotesRouter } from './creditNotes.js';
+import { expensesRouter } from './expenses.js';
+import { attendanceRouter } from './attendance.js';
+import { bankingRouter } from './banking.js';
+import { importsRouter } from './imports.js';
 
 export const apiRouter = Router();
 
@@ -47,10 +51,14 @@ apiRouter.use('/quotations', requireModule('sales'), quotationsRouter);
 apiRouter.use('/invoices', requireModule('invoicing'), invoicesRouter);
 apiRouter.use('/credit-notes', requireModule('invoicing'), creditNotesRouter);
 apiRouter.use('/accounting', requireModule('accounting'), accountingRouter);
+apiRouter.use('/expenses', requireModule('expenses'), expensesRouter);
+apiRouter.use('/banking', requireModule('accounting'), bankingRouter);
+apiRouter.use('/imports', importsRouter);
 apiRouter.use('/employees', requireModule('hr'), employeesRouter);
 apiRouter.use('/departments', requireModule('hr'), departmentsRouter);
 apiRouter.use('/leave', requireModule('time-off'), leaveRouter);
 apiRouter.use('/timesheets', requireModule('timesheets'), timesheetsRouter);
+apiRouter.use('/attendance', requireModule('attendance'), attendanceRouter);
 apiRouter.use('/projects', requireModule('projects'), projectsRouter);
 apiRouter.use('/barcode', requireModule('barcode'), barcodeRouter);
 apiRouter.use('/maintenance', requireModule('maintenance'), maintenanceRouter);

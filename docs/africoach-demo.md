@@ -29,6 +29,9 @@ main vula-erp dev servers.
 - 8 sales orders (draft, confirmed, fulfilled, invoiced)
 - 35 invoices, 32 payments and 67 journal entries across June–November 2026
 - 6 employees across Management, Sales, Finance and Warehouse
+- Attendance register for the last three working days
+- 5 operating expenses (rent, utilities, transport, consumables, marketing)
+- 1 bank account with 5 statement lines ready to reconcile
 - 2 POS registers — Johannesburg and Cape Town
 - 1 open POS session with 3 cash/card sales and cash-up data
 - Public site at `/site` with an “About Africoach” page and a blog post
@@ -49,8 +52,9 @@ Two separate deployments would duplicate the masters and ledgers and prevent a
 consolidated view. Only split deployments if the branches are separate legal entities
 with separate accounting, or need to operate independently/offline.
 
-Still to build for full branch management: branch-scoped users, branch filters on
-sales/purchases/reports, stock transfers between branches, and branch P&L.
+Branch-scoped users are supported: set a user's **Branch scope** on the Users page and
+their sales, purchase, invoice and quotation lists are restricted to that warehouse.
+Stock transfers between branches and branch P&L are still to build.
 
 ## Mobile
 
@@ -100,6 +104,7 @@ Logs: `/tmp/opencode/africoach-demo.log`
 cd ~/apps/vula-erp
 rm -f data/africoach-demo.db data/africoach-demo.db-shm data/africoach-demo.db-wal
 DB_PATH=data/africoach-demo.db npx tsx scripts/seed-africoach.ts
+DB_PATH=data/africoach-demo.db npx tsx scripts/seed-demo-extras.ts
 ```
 
 The seed script is in `scripts/seed-africoach.ts`. It is separate from the main

@@ -1,6 +1,11 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
-import { authenticate, requirePermission } from '../middleware/auth.js';
+import {
+  authenticate,
+  branchWarehouseId,
+  effectiveWarehouseId,
+  requirePermission,
+} from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
 import { ValidationError, notFound } from '../utils/errors.js';
 import {
@@ -51,6 +56,11 @@ invoicesRouter.get(
     if (req.query.warehouseId) {
       where.push('i.warehouse_id = ?');
       params.push(Number(req.query.warehouseId));
+    }
+    const branchScope = branchWarehouseId(req.user!);
+    if (branchScope !== null) {
+      where.push('i.warehouse_id = ?');
+      params.push(branchScope);
     }
     if (req.query.from) {
       where.push('i.issue_date >= ?');
@@ -197,7 +207,7 @@ invoicesRouter.post(
       issueDate,
       dueDate,
       notes: optionalString(req.body?.notes, 'Notes', 5000),
-      warehouseId: optionalInt(req.body?.warehouseId, 'Branch', 1),
+      warehouseId: effectiveWarehouseId(req.user!, optionalInt(req.body?.warehouseId, 'Branch', 1)),
       lines,
       post: req.body?.post !== false,
       userId: req.user!.id,

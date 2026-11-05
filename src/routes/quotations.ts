@@ -1,6 +1,11 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
-import { authenticate, requirePermission } from '../middleware/auth.js';
+import {
+  authenticate,
+  branchWarehouseId,
+  effectiveWarehouseId,
+  requirePermission,
+} from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
 import { ValidationError, notFound } from '../utils/errors.js';
 import {
@@ -150,6 +155,11 @@ quotationsRouter.get(
       where.push('q.warehouse_id = ?');
       params.push(Number(req.query.warehouseId));
     }
+    const branchScope = branchWarehouseId(req.user!);
+    if (branchScope !== null) {
+      where.push('q.warehouse_id = ?');
+      params.push(branchScope);
+    }
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (q) {
       where.push('(q.number LIKE ? OR p.name LIKE ?)');
@@ -204,7 +214,7 @@ quotationsRouter.post(
         .run(
           number,
           customerId,
-          optionalInt(req.body?.warehouseId, 'Branch', 1),
+          effectiveWarehouseId(req.user!, optionalInt(req.body?.warehouseId, 'Branch', 1)),
           requireDate(req.body?.quoteDate, 'Quote date'),
           optionalDate(req.body?.validUntil, 'Valid until'),
           subtotal,
@@ -251,9 +261,12 @@ quotationsRouter.put(
            updated_at = datetime('now') WHERE id = ?`,
       ).run(
         customerId,
-        req.body?.warehouseId === undefined
-          ? (existing.warehouse_id as number | null)
-          : optionalInt(req.body.warehouseId, 'Branch', 1),
+        effectiveWarehouseId(
+          req.user!,
+          req.body?.warehouseId === undefined
+            ? (existing.warehouse_id as number | null)
+            : optionalInt(req.body.warehouseId, 'Branch', 1),
+        ),
         req.body?.quoteDate === undefined
           ? existing.quote_date
           : requireDate(req.body.quoteDate, 'Quote date'),
@@ -320,6 +333,11 @@ quotationsRouter.post(
     if (quotation.status === 'cancelled') {
       throw new ValidationError('Cancelled quotations cannot be converted');
     }
+    const scope = branchWarehouseId(req.user!);
+    if (scope !== null && quotation.warehouse_id !== null && quotation.warehouse_id !== scope) {
+      throw new ValidationError('This quotation belongs to another branch');
+    }
+    const orderWarehouseId = effectiveWarehouseId(req.user!, quotation.warehouse_id);
     const lines = db
       .prepare('SELECT * FROM quotation_lines WHERE quotation_id = ? ORDER BY id')
       .all(id) as {
@@ -345,7 +363,7 @@ quotationsRouter.post(
         .run(
           number,
           quotation.customer_id,
-          quotation.warehouse_id,
+          orderWarehouseId,
           new Date().toISOString().slice(0, 10),
           quotation.subtotal_cents,
           quotation.tax_cents,

@@ -15,9 +15,13 @@ const PurchaseOrdersPage = lazy(() => import('./pages/PurchaseOrdersPage'));
 const SalesOrdersPage = lazy(() => import('./pages/SalesOrdersPage'));
 const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
 const AccountingPage = lazy(() => import('./pages/AccountingPage'));
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage'));
+const BankReconciliationPage = lazy(() => import('./pages/BankReconciliationPage'));
+const ImportPage = lazy(() => import('./pages/ImportPage'));
 const EmployeesPage = lazy(() => import('./pages/EmployeesPage'));
 const TimeOffPage = lazy(() => import('./pages/TimeOffPage'));
 const TimesheetsPage = lazy(() => import('./pages/TimesheetsPage'));
+const AttendancePage = lazy(() => import('./pages/AttendancePage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const BarcodePage = lazy(() => import('./pages/BarcodePage'));
 const MaintenancePage = lazy(() => import('./pages/MaintenancePage'));
@@ -256,6 +260,26 @@ export default function App() {
             }
           />
           <Route
+            path="/expenses"
+            element={
+              <Guard permission="expenses.view" module="expenses">
+                <Page>
+                  <ExpensesPage />
+                </Page>
+              </Guard>
+            }
+          />
+          <Route
+            path="/bank-reconciliation"
+            element={
+              <Guard permission="accounting.view" module="accounting">
+                <Page>
+                  <BankReconciliationPage />
+                </Page>
+              </Guard>
+            }
+          />
+          <Route
             path="/employees"
             element={
               <Guard permission="hr.view" module="hr">
@@ -281,6 +305,16 @@ export default function App() {
               <Guard permission="hr.view" module="timesheets">
                 <Page>
                   <TimesheetsPage />
+                </Page>
+              </Guard>
+            }
+          />
+          <Route
+            path="/attendance"
+            element={
+              <Guard permission="attendance.view" module="attendance">
+                <Page>
+                  <AttendancePage />
                 </Page>
               </Guard>
             }
@@ -381,6 +415,16 @@ export default function App() {
               <Guard permission="modules.manage">
                 <Page>
                   <PluginsPage />
+                </Page>
+              </Guard>
+            }
+          />
+          <Route
+            path="/imports"
+            element={
+              <Guard permission="data.import">
+                <Page>
+                  <ImportPage />
                 </Page>
               </Guard>
             }
