@@ -3,6 +3,6 @@
   "compilerOptions": {
     "sourceMap": false
   },
-  "include": ["src/**/*.ts", "server.ts"],
-  "exclude": ["frontend", "node_modules", "dist", "src/**/*.test.ts", "scripts"]
+  "include": ["src/**/*.ts", "server.ts", "scripts/**/*.ts"],
+  "exclude": ["frontend", "node_modules", "dist", "src/**/*.test.ts"]
 }
