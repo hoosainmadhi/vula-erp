@@ -1475,6 +1475,7 @@ function main(): void {
   });
 
   setting('company_name', 'Africoach');
+  setting('company_logo', '/africoach-logo.svg');
   setting('company_registration', '2017/205910/07');
   setting('company_vat_number', '4123456789');
   setting('company_email', 'info@africoach.co.za');

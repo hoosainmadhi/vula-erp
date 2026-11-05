@@ -37,6 +37,10 @@ const MyLeavePage = lazy(() => import('./pages/MyLeavePage'));
 const WorkshopPage = lazy(() => import('./pages/WorkshopPage'));
 const QuotationsPage = lazy(() => import('./pages/QuotationsPage'));
 const PrintQuotationPage = lazy(() => import('./pages/PrintQuotationPage'));
+const PrintInvoicePage = lazy(() => import('./pages/PrintInvoicePage'));
+const PrintCreditNotePage = lazy(() => import('./pages/PrintCreditNotePage'));
+const PrintStatementPage = lazy(() => import('./pages/PrintStatementPage'));
+const PrintJobCardPage = lazy(() => import('./pages/PrintJobCardPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const PluginsPage = lazy(() => import('./pages/PluginsPage'));
@@ -162,6 +166,38 @@ export default function App() {
           element={
             <Page>
               <PrintQuotationPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/print/invoice/:id"
+          element={
+            <Page>
+              <PrintInvoicePage />
+            </Page>
+          }
+        />
+        <Route
+          path="/print/credit-note/:id"
+          element={
+            <Page>
+              <PrintCreditNotePage />
+            </Page>
+          }
+        />
+        <Route
+          path="/print/statement/:partnerId"
+          element={
+            <Page>
+              <PrintStatementPage />
+            </Page>
+          }
+        />
+        <Route
+          path="/print/job-card/:id"
+          element={
+            <Page>
+              <PrintJobCardPage />
             </Page>
           }
         />

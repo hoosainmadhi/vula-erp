@@ -93,7 +93,11 @@ invoicesRouter.get(
     const invoices = db
       .prepare(
         `SELECT i.*, p.name AS partner_name, w.name AS warehouse_name,
-                (i.total_cents - i.amount_paid_cents) AS outstanding_cents,
+                COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
+                          WHERE c.invoice_id = i.id AND c.status = 'posted'), 0) AS credited_cents,
+                (i.total_cents - i.amount_paid_cents -
+                  COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
+                            WHERE c.invoice_id = i.id AND c.status = 'posted'), 0)) AS outstanding_cents,
                 CASE WHEN i.status = 'open' AND i.due_date < date('now') THEN 1 ELSE 0 END AS overdue
          FROM invoices i
          JOIN partners p ON p.id = i.partner_id
@@ -105,8 +109,16 @@ invoicesRouter.get(
     const summary = db
       .prepare(
         `SELECT
-           COALESCE(SUM(CASE WHEN i.direction = 'sale' AND i.status = 'open' THEN i.total_cents - i.amount_paid_cents END), 0) AS receivable_cents,
-           COALESCE(SUM(CASE WHEN i.direction = 'purchase' AND i.status = 'open' THEN i.total_cents - i.amount_paid_cents END), 0) AS payable_cents
+           COALESCE(SUM(CASE WHEN i.direction = 'sale' AND i.status = 'open'
+             THEN i.total_cents - i.amount_paid_cents -
+               COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
+                         WHERE c.invoice_id = i.id AND c.status = 'posted'), 0)
+             END), 0) AS receivable_cents,
+           COALESCE(SUM(CASE WHEN i.direction = 'purchase' AND i.status = 'open'
+             THEN i.total_cents - i.amount_paid_cents -
+               COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
+                         WHERE c.invoice_id = i.id AND c.status = 'posted'), 0)
+             END), 0) AS payable_cents
          FROM invoices i`,
       )
       .get();

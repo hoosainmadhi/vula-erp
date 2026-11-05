@@ -259,14 +259,28 @@ function StatementModal({ partner, onClose }: { partner: Partner; onClose: () =>
   const { data, loading, error } = useFetch<{
     invoices: (Invoice & { outstanding_cents: number })[];
     payments: Payment[];
+    creditNotes: {
+      id: number;
+      number: string;
+      issue_date: string;
+      total_cents: number;
+      reason: string | null;
+      invoice_number: string;
+    }[];
   }>(`/partners/${partner.id}/statement?direction=${direction}`, [direction]);
 
   const invoiceTotal = data?.invoices.reduce((total, row) => total + row.total_cents, 0) ?? 0;
   const paidTotal = data?.payments.reduce((total, row) => total + row.amount_cents, 0) ?? 0;
+  const creditTotal = data?.creditNotes.reduce((total, row) => total + row.total_cents, 0) ?? 0;
+
+  const printStatement = () => {
+    const params = new URLSearchParams({ direction });
+    window.open(`/print/statement/${partner.id}?${params.toString()}`, '_blank');
+  };
 
   return (
     <Modal title={`Statement — ${partner.name}`} onClose={onClose} wide>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         {partner.is_customer === 1 ? (
           <button
             type="button"
@@ -285,6 +299,9 @@ function StatementModal({ partner, onClose }: { partner: Partner; onClose: () =>
             Supplier bills
           </button>
         ) : null}
+        <button type="button" className={`${btnSecondary} ml-auto`} onClick={printStatement}>
+          Print / PDF
+        </button>
       </div>
       {loading ? <Spinner /> : error ? <ErrorBox message={error} /> : null}
       {data ? (
@@ -300,7 +317,9 @@ function StatementModal({ partner, onClose }: { partner: Partner; onClose: () =>
             </Card>
             <Card className="p-3">
               <p className="text-xs text-slate-500">Outstanding</p>
-              <p className="text-lg font-bold text-amber-700">{money(invoiceTotal - paidTotal)}</p>
+              <p className="text-lg font-bold text-amber-700">
+                {money(invoiceTotal - paidTotal - creditTotal)}
+              </p>
             </Card>
           </div>
           <div>
@@ -365,6 +384,39 @@ function StatementModal({ partner, onClose }: { partner: Partner; onClose: () =>
                       <td className="px-2 py-2">{titleCase(payment.method)}</td>
                       <td className="px-2 py-2">{payment.reference ?? '—'}</td>
                       <td className="px-2 py-2 text-right">{money(payment.amount_cents)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h3 className="mb-1 text-sm font-bold text-slate-900">Credit notes</h3>
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-xs uppercase text-slate-500">
+                  <th className="px-2 py-2">Number</th>
+                  <th className="px-2 py-2">Date</th>
+                  <th className="px-2 py-2">Invoice</th>
+                  <th className="px-2 py-2">Reason</th>
+                  <th className="px-2 py-2 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.creditNotes.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No credit notes recorded.
+                    </td>
+                  </tr>
+                ) : (
+                  data.creditNotes.map((note) => (
+                    <tr key={note.id} className="border-t border-slate-100">
+                      <td className="px-2 py-2 font-mono text-xs">{note.number}</td>
+                      <td className="px-2 py-2">{shortDate(note.issue_date)}</td>
+                      <td className="px-2 py-2 font-mono text-xs">{note.invoice_number}</td>
+                      <td className="px-2 py-2">{note.reason ?? '—'}</td>
+                      <td className="px-2 py-2 text-right">{money(note.total_cents)}</td>
                     </tr>
                   ))
                 )}

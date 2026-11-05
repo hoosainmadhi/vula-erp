@@ -53,8 +53,9 @@ consolidated view. Only split deployments if the branches are separate legal ent
 with separate accounting, or need to operate independently/offline.
 
 Branch-scoped users are supported: set a user's **Branch scope** on the Users page and
-their sales, purchase, invoice and quotation lists are restricted to that warehouse.
-Stock transfers between branches and branch P&L are still to build.
+their sales, purchase, invoice, quotation, inventory and POS views are restricted to
+that warehouse. Stock can be transferred between locations, and Accounting → Reports →
+Branches shows sales, purchases, cost of sales and gross margin per branch.
 
 ## Mobile
 
@@ -131,9 +132,11 @@ not show **My Leave**; use an individual staff login for self-service.
 ## Honest caveats
 
 - This is a **foundation demo**, not a finished K8 replacement.
-- Product fitment/brand data is stored in the product description; there are no
-  variants, cross-references or price lists yet.
-- Multi-branch stock exists, but there is no transfer workflow or branch P&L.
-- Imports, landed costs, multi-currency and credit notes are not implemented.
+- Product fitment/brand data is stored in attributes and the product description;
+  there are no variants, cross-references or price lists yet.
+- Multi-branch stock, stock transfers, branch-scoped users and branch performance
+  reporting are available; full branch P&L (allocating expenses/payroll) is not.
+- CSV/Odoo imports cover products, partners, opening stock and opening balances;
+  landed costs, multi-currency and historical document import are not implemented.
 - The public site is a CMS, not a B2B storefront.
 - K8, Antheros and Phocas are not integrated in this demo.

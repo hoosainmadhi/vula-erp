@@ -5,6 +5,9 @@ import { asyncHandler } from '../utils/http.js';
 import { ValidationError } from '../utils/errors.js';
 import { requireString } from '../utils/validate.js';
 import { recordAudit } from '../services/audit.js';
+import { recordMove } from '../services/stock.js';
+import { postJournalEntry } from '../services/accounting.js';
+import { today } from '../utils/dates.js';
 
 export const importsRouter = Router();
 importsRouter.use(authenticate);
@@ -295,5 +298,178 @@ importsRouter.post(
 
     recordAudit(req.user!.id, 'import', 'partners', null, { created, updated });
     res.status(201).json({ created, updated, errors, total: rows.length - 1 });
+  }),
+);
+
+importsRouter.post(
+  '/opening-stock',
+  requirePermission('data.import'),
+  asyncHandler(async (req, res) => {
+    const rows = parseCsv(requireString(req.body?.csv, 'CSV', 2_000_000));
+    if (rows.length < 2)
+      throw new ValidationError('CSV needs a header row and at least one data row');
+    const headers = (rows[0] ?? []).map((header) => header.toLowerCase());
+    const skuIndex = headerIndex(headers, 'sku', 'default_code', 'code');
+    const qtyIndex = headerIndex(headers, 'quantity', 'qty', 'stock');
+    const locationIndex = headerIndex(headers, 'location_code', 'location');
+    const warehouseIndex = headerIndex(headers, 'warehouse_code', 'warehouse');
+    const costIndex = headerIndex(headers, 'unit_cost', 'cost', 'standard_price');
+    if (skuIndex < 0 || qtyIndex < 0) {
+      throw new ValidationError('CSV must include sku and quantity columns');
+    }
+
+    const db = getDb();
+    const findProduct = db.prepare('SELECT id, cost_cents FROM products WHERE sku = ?');
+    const findLocationByCode = db.prepare(
+      'SELECT id FROM stock_locations WHERE lower(code) = lower(?) ORDER BY id LIMIT 1',
+    );
+    const findWarehouseLocation = db.prepare(
+      `SELECT l.id FROM stock_locations l JOIN warehouses w ON w.id = l.warehouse_id
+       WHERE lower(w.code) = lower(?) ORDER BY l.is_default DESC, l.id LIMIT 1`,
+    );
+    const findDefaultLocation = db.prepare(
+      'SELECT id FROM stock_locations ORDER BY is_default DESC, id LIMIT 1',
+    );
+
+    let imported = 0;
+    const errors: string[] = [];
+    const run = db.transaction(() => {
+      for (let index = 1; index < rows.length; index += 1) {
+        const row = rows[index] ?? [];
+        const sku = row[skuIndex]?.trim();
+        const quantity = Number(row[qtyIndex]);
+        if (!sku) {
+          errors.push(`Row ${index + 1}: sku is required`);
+          continue;
+        }
+        if (!Number.isFinite(quantity) || quantity === 0) {
+          errors.push(`Row ${index + 1}: quantity must be a non-zero number`);
+          continue;
+        }
+        const product = findProduct.get(sku) as { id: number; cost_cents: number } | undefined;
+        if (!product) {
+          errors.push(`Row ${index + 1}: product ${sku} not found`);
+          continue;
+        }
+        let locationId: number | null = null;
+        const locationCode = locationIndex >= 0 ? row[locationIndex]?.trim() : '';
+        const warehouseCode = warehouseIndex >= 0 ? row[warehouseIndex]?.trim() : '';
+        if (locationCode) {
+          const location = findLocationByCode.get(locationCode) as { id: number } | undefined;
+          locationId = location?.id ?? null;
+        } else if (warehouseCode) {
+          const location = findWarehouseLocation.get(warehouseCode) as { id: number } | undefined;
+          locationId = location?.id ?? null;
+        } else {
+          const location = findDefaultLocation.get() as { id: number } | undefined;
+          locationId = location?.id ?? null;
+        }
+        if (!locationId) {
+          errors.push(`Row ${index + 1}: stock location not found`);
+          continue;
+        }
+        const unitCost =
+          costIndex >= 0 && row[costIndex]
+            ? Math.round(Number(row[costIndex].replace(/[^0-9.-]/g, '')) * 100)
+            : product.cost_cents;
+        recordMove({
+          productId: product.id,
+          locationId,
+          quantity,
+          moveType: 'opening',
+          referenceType: 'import',
+          unitCostCents: Number.isFinite(unitCost) ? unitCost : product.cost_cents,
+          note: 'Opening stock import',
+          userId: req.user!.id,
+        });
+        imported += 1;
+      }
+    });
+    run();
+    recordAudit(req.user!.id, 'import', 'opening_stock', null, { imported });
+    res.status(201).json({ imported, errors });
+  }),
+);
+
+importsRouter.post(
+  '/opening-balances',
+  requirePermission('data.import'),
+  asyncHandler(async (req, res) => {
+    const rows = parseCsv(requireString(req.body?.csv, 'CSV', 2_000_000));
+    if (rows.length < 2)
+      throw new ValidationError('CSV needs a header row and at least one data row');
+    const headers = (rows[0] ?? []).map((header) => header.toLowerCase());
+    const accountIndex = headerIndex(headers, 'account_code', 'code', 'account');
+    const debitIndex = headerIndex(headers, 'debit', 'debit_cents');
+    const creditIndex = headerIndex(headers, 'credit', 'credit_cents');
+    const descriptionIndex = headerIndex(headers, 'description', 'name');
+    if (accountIndex < 0 || (debitIndex < 0 && creditIndex < 0)) {
+      throw new ValidationError('CSV must include account_code and debit or credit columns');
+    }
+    const entryDate =
+      typeof req.body?.entryDate === 'string' && req.body.entryDate
+        ? requireString(req.body.entryDate, 'Entry date', 10)
+        : today();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entryDate)) {
+      throw new ValidationError('Entry date must be YYYY-MM-DD');
+    }
+
+    const db = getDb();
+    const findAccount = db.prepare('SELECT id, code FROM accounts WHERE code = ?');
+    const items: {
+      accountId: number;
+      debitCents: number;
+      creditCents: number;
+      description: string;
+    }[] = [];
+    const errors: string[] = [];
+    for (let index = 1; index < rows.length; index += 1) {
+      const row = rows[index] ?? [];
+      const code = row[accountIndex]?.trim();
+      if (!code) {
+        errors.push(`Row ${index + 1}: account_code is required`);
+        continue;
+      }
+      const account = findAccount.get(code) as { id: number; code: string } | undefined;
+      if (!account) {
+        errors.push(`Row ${index + 1}: account ${code} not found`);
+        continue;
+      }
+      const debit = debitIndex >= 0 ? toCents(row[debitIndex]) : 0;
+      const credit = creditIndex >= 0 ? toCents(row[creditIndex]) : 0;
+      if (debit <= 0 && credit <= 0) {
+        errors.push(`Row ${index + 1}: debit or credit must be positive`);
+        continue;
+      }
+      items.push({
+        accountId: account.id,
+        debitCents: debit,
+        creditCents: credit,
+        description:
+          (descriptionIndex >= 0 ? row[descriptionIndex]?.trim() : '') || `Opening balance ${code}`,
+      });
+    }
+
+    const totalDebit = items.reduce((total, item) => total + item.debitCents, 0);
+    const totalCredit = items.reduce((total, item) => total + item.creditCents, 0);
+    if (items.length < 2) throw new ValidationError('Opening balances need at least two lines');
+    if (totalDebit !== totalCredit) {
+      throw new ValidationError(
+        `Opening balances do not balance (debits ${totalDebit} vs credits ${totalCredit})`,
+      );
+    }
+
+    const journalEntryId = postJournalEntry({
+      journalCode: 'GEN',
+      entryDate,
+      description: 'Opening balances import',
+      sourceType: 'opening_balance',
+      userId: req.user!.id,
+      items,
+    });
+    recordAudit(req.user!.id, 'import', 'opening_balances', journalEntryId, {
+      items: items.length,
+    });
+    res.status(201).json({ journalEntryId, items: items.length, errors });
   }),
 );

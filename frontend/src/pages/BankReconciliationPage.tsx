@@ -360,6 +360,12 @@ export default function BankReconciliationPage() {
   };
 
   const rows = transactions.data?.transactions ?? [];
+  const targetAmount = matching ? Math.abs(matching.amount_cents) : 0;
+  const candidateRows = [...(candidates.data?.candidates ?? [])].sort(
+    (a, b) =>
+      Math.abs(Math.abs(a.debit_cents - a.credit_cents) - targetAmount) -
+      Math.abs(Math.abs(b.debit_cents - b.credit_cents) - targetAmount),
+  );
 
   return (
     <>
@@ -613,15 +619,23 @@ export default function BankReconciliationPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(candidates.data?.candidates ?? []).length === 0 ? (
+                    {candidateRows.length === 0 ? (
                       <EmptyState
                         colSpan={5}
                         message="No unmatched ledger entries on this account."
                       />
                     ) : (
-                      (candidates.data?.candidates ?? []).map((candidate) => (
+                      candidateRows.map((candidate) => (
                         <tr key={`${candidate.journal_entry_id}-${candidate.debit_cents}`}>
-                          <td className={`${tdCls} font-mono text-xs`}>{candidate.number}</td>
+                          <td className={`${tdCls} font-mono text-xs`}>
+                            {candidate.number}
+                            {Math.abs(candidate.debit_cents - candidate.credit_cents) ===
+                            targetAmount ? (
+                              <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                                Suggested
+                              </span>
+                            ) : null}
+                          </td>
                           <td className={tdCls}>{shortDate(candidate.entry_date)}</td>
                           <td className={tdCls}>
                             {candidate.line_description ?? candidate.description}

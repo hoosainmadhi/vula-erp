@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
-import { authenticate, requirePermission } from '../middleware/auth.js';
+import { authenticate, branchWarehouseId, requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
-import { ValidationError, notFound } from '../utils/errors.js';
+import { ValidationError, HttpError, notFound } from '../utils/errors.js';
 import {
   optionalCents,
   optionalInt,
@@ -122,7 +122,8 @@ function expectedCash(sessionId: number): number {
 posRouter.get(
   '/registers',
   requirePermission('pos.view'),
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const scope = branchWarehouseId(req.user!);
     const registers = getDb()
       .prepare(
         `SELECT r.*, l.code AS location_code, l.name AS location_name, w.name AS warehouse_name,
@@ -131,9 +132,10 @@ posRouter.get(
          FROM pos_registers r
          LEFT JOIN stock_locations l ON l.id = r.location_id
          LEFT JOIN warehouses w ON w.id = r.warehouse_id
+         ${scope === null ? '' : 'WHERE r.warehouse_id = ?'}
          ORDER BY r.name`,
       )
-      .all();
+      .all(...(scope === null ? [] : [scope]));
     res.json({ registers });
   }),
 );
@@ -230,6 +232,11 @@ posRouter.get(
       where.push('s.status = ?');
       params.push(req.query.status);
     }
+    const branchScope = branchWarehouseId(req.user!);
+    if (branchScope !== null) {
+      where.push('r.warehouse_id = ?');
+      params.push(branchScope);
+    }
     const sessions = getDb()
       .prepare(
         `SELECT s.*, r.name AS register_name, r.code AS register_code,
@@ -261,6 +268,10 @@ posRouter.post(
   asyncHandler(async (req, res) => {
     const registerId = requireInt(req.body?.registerId, 'Register', 1);
     const register = registerRow(registerId);
+    const scope = branchWarehouseId(req.user!);
+    if (scope !== null && register.warehouse_id !== scope) {
+      throw new HttpError(403, 'This register belongs to another branch', 'forbidden');
+    }
     const db = getDb();
     const open = db
       .prepare("SELECT id FROM pos_sessions WHERE register_id = ? AND status = 'open'")
@@ -402,6 +413,11 @@ posRouter.get(
     if (req.query.sessionId) {
       where.push('o.session_id = ?');
       params.push(Number(req.query.sessionId));
+    }
+    const branchScope = branchWarehouseId(req.user!);
+    if (branchScope !== null) {
+      where.push('r.warehouse_id = ?');
+      params.push(branchScope);
     }
     const orders = getDb()
       .prepare(

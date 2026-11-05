@@ -358,6 +358,121 @@ accountingRouter.get(
 );
 
 accountingRouter.get(
+  '/reports/branches',
+  requirePermission('accounting.view'),
+  asyncHandler(async (req, res) => {
+    const date = today();
+    const from = optionalDate(req.query.from, 'From date') ?? monthStart(date);
+    const to = optionalDate(req.query.to, 'To date') ?? monthEnd(date);
+    const db = getDb();
+    const warehouses = db.prepare('SELECT id, code, name FROM warehouses ORDER BY name').all() as {
+      id: number;
+      code: string;
+      name: string;
+    }[];
+    const sales = db
+      .prepare(
+        `SELECT warehouse_id, COALESCE(SUM(subtotal_cents), 0) AS sales_cents,
+                COALESCE(SUM(tax_cents), 0) AS vat_cents, COUNT(*) AS invoices
+         FROM invoices
+         WHERE direction = 'sale' AND status IN ('open', 'paid') AND issue_date BETWEEN ? AND ?
+         GROUP BY warehouse_id`,
+      )
+      .all(from, to) as {
+      warehouse_id: number | null;
+      sales_cents: number;
+      vat_cents: number;
+      invoices: number;
+    }[];
+    const purchases = db
+      .prepare(
+        `SELECT warehouse_id, COALESCE(SUM(subtotal_cents), 0) AS purchases_cents,
+                COUNT(*) AS bills
+         FROM invoices
+         WHERE direction = 'purchase' AND status IN ('open', 'paid') AND issue_date BETWEEN ? AND ?
+         GROUP BY warehouse_id`,
+      )
+      .all(from, to) as { warehouse_id: number | null; purchases_cents: number; bills: number }[];
+    const cogs = db
+      .prepare(
+        `SELECT sl.warehouse_id, COALESCE(SUM(-m.quantity * m.unit_cost_cents), 0) AS cogs_cents
+         FROM stock_moves m
+         JOIN stock_locations sl ON sl.id = m.location_id
+         WHERE m.move_type = 'sale' AND date(m.created_at) BETWEEN ? AND ?
+         GROUP BY sl.warehouse_id`,
+      )
+      .all(from, to) as { warehouse_id: number; cogs_cents: number }[];
+
+    const rows: {
+      warehouse_id: number | null;
+      warehouse_code: string;
+      warehouse_name: string;
+      sales_cents: number;
+      vat_cents: number;
+      invoices: number;
+      purchases_cents: number;
+      bills: number;
+      cogs_cents: number;
+      gross_profit_cents: number;
+      margin_bp: number;
+    }[] = warehouses.map((warehouse) => {
+      const sale = sales.find((row) => row.warehouse_id === warehouse.id);
+      const purchase = purchases.find((row) => row.warehouse_id === warehouse.id);
+      const cost = cogs.find((row) => row.warehouse_id === warehouse.id);
+      const salesCents = sale?.sales_cents ?? 0;
+      const cogsCents = cost?.cogs_cents ?? 0;
+      return {
+        warehouse_id: warehouse.id,
+        warehouse_code: warehouse.code,
+        warehouse_name: warehouse.name,
+        sales_cents: salesCents,
+        vat_cents: sale?.vat_cents ?? 0,
+        invoices: sale?.invoices ?? 0,
+        purchases_cents: purchase?.purchases_cents ?? 0,
+        bills: purchase?.bills ?? 0,
+        cogs_cents: cogsCents,
+        gross_profit_cents: salesCents - cogsCents,
+        margin_bp: salesCents > 0 ? Math.round(((salesCents - cogsCents) / salesCents) * 10000) : 0,
+      };
+    });
+    const unassigned: (typeof rows)[number] = {
+      warehouse_id: null,
+      warehouse_code: '—',
+      warehouse_name: 'Unassigned / no branch',
+      sales_cents: sales.find((row) => row.warehouse_id === null)?.sales_cents ?? 0,
+      vat_cents: sales.find((row) => row.warehouse_id === null)?.vat_cents ?? 0,
+      invoices: sales.find((row) => row.warehouse_id === null)?.invoices ?? 0,
+      purchases_cents: purchases.find((row) => row.warehouse_id === null)?.purchases_cents ?? 0,
+      bills: purchases.find((row) => row.warehouse_id === null)?.bills ?? 0,
+      cogs_cents: cogs.find((row) => row.warehouse_id === null)?.cogs_cents ?? 0,
+      gross_profit_cents: 0,
+      margin_bp: 0,
+    };
+    if (unassigned.sales_cents > 0 || unassigned.purchases_cents > 0) {
+      unassigned.gross_profit_cents = unassigned.sales_cents - unassigned.cogs_cents;
+      unassigned.margin_bp =
+        unassigned.sales_cents > 0
+          ? Math.round(
+              ((unassigned.sales_cents - unassigned.cogs_cents) / unassigned.sales_cents) * 10000,
+            )
+          : 0;
+      rows.push(unassigned);
+    }
+
+    const totals = rows.reduce(
+      (total, row) => ({
+        sales_cents: total.sales_cents + row.sales_cents,
+        purchases_cents: total.purchases_cents + row.purchases_cents,
+        cogs_cents: total.cogs_cents + row.cogs_cents,
+        gross_profit_cents: total.gross_profit_cents + row.gross_profit_cents,
+      }),
+      { sales_cents: 0, purchases_cents: 0, cogs_cents: 0, gross_profit_cents: 0 },
+    );
+    res.json({ from, to, rows, totals });
+  }),
+);
+
+accountingRouter.get(
   '/reports/ledger/:accountId',
   requirePermission('accounting.view'),
   asyncHandler(async (req, res) => {

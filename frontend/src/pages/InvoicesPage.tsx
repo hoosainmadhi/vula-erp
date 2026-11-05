@@ -609,6 +609,13 @@ function DetailModal({
 
         {canManage ? (
           <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
+            <button
+              type="button"
+              className={btnSecondary}
+              onClick={() => window.open(`/print/invoice/${invoice.id}`, '_blank')}
+            >
+              Print / PDF
+            </button>
             {invoice.status === 'draft' ? (
               <>
                 <button
@@ -1029,11 +1036,12 @@ export default function InvoicesPage() {
                   <th className={`${thCls} text-right`}>Net</th>
                   <th className={`${thCls} text-right`}>VAT</th>
                   <th className={`${thCls} text-right`}>Total</th>
+                  <th className={thCls} />
                 </tr>
               </thead>
               <tbody>
                 {!creditNotes.data || creditNotes.data.creditNotes.length === 0 ? (
-                  <EmptyState colSpan={8} message="No credit notes yet." />
+                  <EmptyState colSpan={9} message="No credit notes yet." />
                 ) : (
                   creditNotes.data.creditNotes.map((note) => (
                     <tr key={note.id} className="hover:bg-slate-50">
@@ -1046,6 +1054,17 @@ export default function InvoicesPage() {
                       <td className={`${tdCls} text-right`}>{money(note.tax_cents)}</td>
                       <td className={`${tdCls} text-right font-semibold`}>
                         {money(note.total_cents)}
+                      </td>
+                      <td className={tdCls}>
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            className={btnGhost}
+                            onClick={() => window.open(`/print/credit-note/${note.id}`, '_blank')}
+                          >
+                            Print
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

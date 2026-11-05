@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 96" role="img" aria-label="Africoach">
+  <rect width="360" height="96" rx="14" fill="#102a43"/>
+  <g fill="#f6c453">
+    <rect x="22" y="34" width="54" height="26" rx="6"/>
+    <rect x="28" y="40" width="16" height="10" rx="2" fill="#102a43"/>
+    <rect x="50" y="40" width="16" height="10" rx="2" fill="#102a43"/>
+    <circle cx="34" cy="64" r="6" fill="#f6c453"/>
+    <circle cx="64" cy="64" r="6" fill="#f6c453"/>
+  </g>
+  <text x="92" y="52" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="700" fill="#ffffff" letter-spacing="1">AFRICOACH</text>
+  <text x="92" y="73" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600" fill="#f6c453" letter-spacing="3">BUS &amp; COACH PARTS</text>
+</svg>

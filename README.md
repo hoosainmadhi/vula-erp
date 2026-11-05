@@ -11,8 +11,14 @@ AureusERP (Laravel/PHP) was used as the **domain blueprint** for entity modellin
 - **Inventory** — signed stock-move ledger with a maintained `stock_levels` projection
 - **Purchasing** — purchase orders, goods receipts, supplier bills
 - **Sales** — sales orders, fulfilment, customer invoices, payments
-- **Accounting** — chart of accounts, journals, double-entry posting, trial balance, P&L, balance sheet, VAT report
+- **Quotations & credit notes** — branded quotes that convert to orders, plus credit notes posted against invoices
+- **Accounting** — chart of accounts, journals, double-entry posting, trial balance, P&L, balance sheet, VAT, aging and branch performance
+- **Expenses** — operating expenses with categories, VAT and ledger posting
+- **Banking** — bank accounts, statement CSV import, matching to posted ledger entries
 - **HR** — departments and employees
+- **Attendance** — daily clock-in/out register; approved leave marks weekdays automatically
+- **Data import** — products, partners, opening stock and opening balances from CSV, including Odoo column names
+- **Branded documents** — printable quotes, invoices, credit notes, statements and workshop job cards with company logo
 - **Time Off** — leave types, requests, approvals and yearly balances
 - **Timesheets** — hours booked against employees and projects, with submit/approve workflow
 - **Projects** — project plans, tasks, budgets and logged time
@@ -111,6 +117,7 @@ Modules are listed on the **Plugins** page (admin only). The catalogue lives in 
 - **Document prices are VAT-exclusive**; VAT is computed per line from the line's basis-point rate (`1500` = 15%) and added to the total.
 - **Document numbers** come from the `sequences` table (`PO-00001`, `GRN-00001`, `SO-00001`, `INV-00001`, `BILL-00001`, `PAY-00001`, `JE-00001`, `PRJ-00001`, `MNT-00001`, `JOB-00001`, `EMP-00001`, …), allocated inside transactions.
 - **Posted accounting entries are immutable.** Draft invoices can be deleted; posted invoices are voided with a reversing journal entry.
+- **Credit notes reduce the invoice balance.** Invoice outstanding, statements, receivables and aging all subtract posted credit notes.
 - **Stock is a signed move ledger.** Receipts are positive, sales/issues negative, and `stock_levels` is updated in the same transaction. Overselling is rejected.
 - **Double entry is enforced:** every journal entry must have at least two lines and debits must equal credits.
 - **RBAC:** every route is guarded by `requirePermission('module.action')`; roles are seeded (`admin`, `accountant`, `sales`, `warehouse`, `hr`, `workshop`, `employee`, `viewer`). Users can optionally be scoped to one branch; admins always see all branches.
@@ -159,16 +166,16 @@ All endpoints are under `/api` and require `Authorization: Bearer <token>` excep
 | Dashboard     | `GET /dashboard`                                                                                                                                                                                                                                                     |
 | Partners      | `/partners` CRUD, `GET /partners/:id/statement`                                                                                                                                                                                                                      |
 | Products      | `/products` CRUD, `/product-categories` CRUD, `/tax-rates` CRUD                                                                                                                                                                                                      |
-| Inventory     | `/inventory/warehouses` CRUD, `/inventory/locations/:id`, `GET /inventory/stock`, `GET /inventory/stock/moves`, `POST /inventory/stock/adjust`                                                                                                                       |
+| Inventory     | `/inventory/warehouses` CRUD, `/inventory/locations/:id`, `GET /inventory/stock`, `GET /inventory/stock/moves`, `POST /inventory/stock/adjust`, `POST /inventory/transfers`                                                                                          |
 | Purchases     | `/purchase-orders` CRUD, `POST /:id/confirm`, `/cancel`, `/receive`, `GET /goods-receipts`                                                                                                                                                                           |
 | Sales         | `/sales-orders` CRUD, `POST /:id/confirm`, `/cancel`, `/fulfil`, `/invoice`                                                                                                                                                                                          |
 | Quotations    | `/quotations` CRUD, `POST /:id/status`, `POST /:id/convert`                                                                                                                                                                                                          |
 | Invoices      | `/invoices` CRUD/draft, `POST /:id/post`, `POST /:id/void`, `POST /from-purchase-order/:id`, `/payments`                                                                                                                                                             |
 | Credit notes  | `/credit-notes` list/detail, `POST /credit-notes` (posts a reversing entry)                                                                                                                                                                                          |
-| Accounting    | `/accounting/accounts` CRUD, `/journals`, `/journal-entries`, `/reports/{trial-balance,profit-and-loss,balance-sheet,ledger/:id,vat,aging}`                                                                                                                          |
+| Accounting    | `/accounting/accounts` CRUD, `/journals`, `/journal-entries`, `/reports/{trial-balance,profit-and-loss,balance-sheet,ledger/:id,vat,aging,branches}`                                                                                                                 |
 | Expenses      | `/expenses` CRUD, `/expenses/categories`, `POST /:id/post`, `POST /:id/void`                                                                                                                                                                                         |
 | Banking       | `/banking/accounts`, `/banking/transactions` + `POST /transactions/import`, `/banking/candidates`, `POST /transactions/:id/match` / `unmatch` / `ignore`, `GET /banking/summary`                                                                                     |
-| Imports       | `POST /imports/products`, `POST /imports/partners` (CSV, including Odoo column aliases)                                                                                                                                                                              |
+| Imports       | `POST /imports/products`, `POST /imports/partners`, `POST /imports/opening-stock`, `POST /imports/opening-balances` (CSV, including Odoo column aliases)                                                                                                             |
 | HR            | `/employees` CRUD, `/departments` CRUD                                                                                                                                                                                                                               |
 | Attendance    | `/attendance` CRUD, `/attendance/employees`, `GET /attendance?from=&to=`                                                                                                                                                                                             |
 | Time Off      | `/leave/types`, `/leave/employees`, `/leave/requests` CRUD, `POST /leave/requests/:id/approve` / `reject` / `cancel`, `GET /leave/summary`                                                                                                                           |

@@ -28,6 +28,7 @@ export default function InventoryPage() {
   const [lowOnly, setLowOnly] = useState(false);
   const [warehouseId, setWarehouseId] = useState('');
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [warehouseOpen, setWarehouseOpen] = useState(false);
   const [locationFor, setLocationFor] = useState<Warehouse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,9 +59,14 @@ export default function InventoryPage() {
         subtitle="Stock on hand, movements and locations"
         actions={
           can('inventory.adjust') ? (
-            <button type="button" className={btnPrimary} onClick={() => setAdjustOpen(true)}>
-              <ArrowLeftRight className="size-4" /> Adjust stock
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={btnSecondary} onClick={() => setTransferOpen(true)}>
+                <ArrowLeftRight className="size-4" /> Transfer stock
+              </button>
+              <button type="button" className={btnPrimary} onClick={() => setAdjustOpen(true)}>
+                <ArrowLeftRight className="size-4" /> Adjust stock
+              </button>
+            </div>
           ) : null
         }
       />
@@ -321,6 +327,18 @@ export default function InventoryPage() {
         />
       ) : null}
 
+      {transferOpen ? (
+        <TransferModal
+          products={products.data?.products ?? []}
+          locations={locations}
+          onClose={() => setTransferOpen(false)}
+          onSaved={() => {
+            stock.reload();
+            moves.reload();
+          }}
+        />
+      ) : null}
+
       {warehouseOpen ? (
         <WarehouseModal
           onClose={() => setWarehouseOpen(false)}
@@ -336,6 +354,128 @@ export default function InventoryPage() {
         />
       ) : null}
     </>
+  );
+}
+
+function TransferModal({
+  products,
+  locations,
+  onClose,
+  onSaved,
+}: {
+  products: Product[];
+  locations: { id: number; name: string; code: string; warehouseName: string }[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState({
+    productId: products[0]?.id ? String(products[0].id) : '',
+    fromLocationId: locations[0]?.id ? String(locations[0].id) : '',
+    toLocationId: locations[1]?.id ? String(locations[1].id) : '',
+    quantity: '1',
+    note: '',
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post('/inventory/transfers', {
+        productId: Number(form.productId),
+        fromLocationId: Number(form.fromLocationId),
+        toLocationId: Number(form.toLocationId),
+        quantity: Number(form.quantity),
+        note: form.note || null,
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Transfer stock between locations" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        {error ? <ErrorBox message={error} /> : null}
+        <Field label="Product">
+          <select
+            className={inputCls}
+            value={form.productId}
+            onChange={(e) => setForm({ ...form, productId: e.target.value })}
+            required
+          >
+            {products.map((product) => (
+              <option key={product.id} value={product.id}>
+                {product.sku} — {product.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="From location">
+            <select
+              className={inputCls}
+              value={form.fromLocationId}
+              onChange={(e) => setForm({ ...form, fromLocationId: e.target.value })}
+              required
+            >
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.warehouseName} / {location.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="To location">
+            <select
+              className={inputCls}
+              value={form.toLocationId}
+              onChange={(e) => setForm({ ...form, toLocationId: e.target.value })}
+              required
+            >
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.warehouseName} / {location.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Field label="Quantity">
+          <input
+            className={inputCls}
+            type="number"
+            min={0.01}
+            step="0.01"
+            value={form.quantity}
+            onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+            required
+          />
+        </Field>
+        <Field label="Note">
+          <input
+            className={inputCls}
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+            placeholder="Replenish Eastern Cape branch…"
+          />
+        </Field>
+        <div className="flex justify-end gap-2">
+          <button type="button" className={btnSecondary} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className={btnPrimary} disabled={busy}>
+            {busy ? 'Transferring…' : 'Transfer stock'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

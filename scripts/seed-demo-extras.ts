@@ -7,7 +7,9 @@
  */
 import { closeDb, getDb } from '../src/db.js';
 import { nextNumber } from '../src/services/sequences.js';
-import { accountByCode } from '../src/services/accounting.js';
+import { accountByCode, postJournalEntry } from '../src/services/accounting.js';
+import { lineTotals } from '../src/utils/money.js';
+import { addDays } from '../src/utils/dates.js';
 
 const db = getDb();
 
@@ -206,13 +208,356 @@ function seedBank(jabulani: boolean): void {
   }
 }
 
+function updateProductAttributes(): void {
+  const rows = db
+    .prepare(
+      `SELECT id, description FROM products
+       WHERE description LIKE 'Brand:%' AND (brand IS NULL OR colour IS NULL OR size IS NULL OR thickness IS NULL)`,
+    )
+    .all() as { id: number; description: string }[];
+  const update = db.prepare(
+    'UPDATE products SET brand = ?, colour = ?, size = ?, thickness = ? WHERE id = ?',
+  );
+  for (const row of rows) {
+    const match = row.description.match(/^Brand:\s*([^.]+)\.\s*(.*)\.$/);
+    if (!match) continue;
+    const brand = match[1]?.trim() || null;
+    const spec = match[2] ?? '';
+    let colour: string | null = null;
+    let size: string | null = null;
+    let thickness: string | null = null;
+    for (const part of spec.split('·').map((value) => value.trim())) {
+      if (!part) continue;
+      if (/^\d+(?:\.\d+)?mm$/i.test(part)) {
+        thickness = part;
+      } else if (/^\d+\s*[x×]\s*\d+/i.test(part)) {
+        size = part.replace(/\s*[x×]\s*/i, 'x');
+      } else if (
+        !colour &&
+        !/^(pack of|per |made to order|clip-on|cut |cutting |on-site|full extension|hot melt)/i.test(
+          part,
+        )
+      ) {
+        colour = part;
+      }
+    }
+    update.run(brand, colour, size, thickness, row.id);
+  }
+}
+
+function seedQuotations(adminId: number | null): void {
+  const count = db.prepare('SELECT COUNT(*) AS count FROM quotations').get() as { count: number };
+  if (count.count > 0) return;
+  const customers = db
+    .prepare('SELECT id FROM partners WHERE is_customer = 1 ORDER BY id LIMIT 4')
+    .all() as { id: number }[];
+  const products = db
+    .prepare(
+      `SELECT p.id, p.name, p.sale_price_cents, COALESCE(t.rate_bp, 0) AS rate_bp
+       FROM products p LEFT JOIN tax_rates t ON t.id = p.tax_rate_id
+       WHERE p.type = 'goods' ORDER BY p.id LIMIT 8`,
+    )
+    .all() as { id: number; name: string; sale_price_cents: number; rate_bp: number }[];
+  if (customers.length === 0 || products.length === 0) return;
+  const warehouse = db.prepare('SELECT id FROM warehouses ORDER BY id LIMIT 1').get() as
+    { id: number } | undefined;
+
+  const quotes = [
+    {
+      status: 'sent',
+      customer: customers[0]!,
+      date: '2026-10-27',
+      lines: [
+        { product: products[0]!, quantity: 6 },
+        { product: products[1] ?? products[0]!, quantity: 2 },
+      ],
+      notes: 'Cutting list to follow after site measure.',
+    },
+    {
+      status: 'accepted',
+      customer: customers[1] ?? customers[0]!,
+      date: '2026-10-29',
+      lines: [
+        { product: products[2] ?? products[0]!, quantity: 10 },
+        { product: products[3] ?? products[1]!, quantity: 4 },
+      ],
+      notes: 'Includes delivery to site.',
+    },
+    {
+      status: 'draft',
+      customer: customers[2] ?? customers[0]!,
+      date: '2026-11-02',
+      lines: [
+        { product: products[4] ?? products[0]!, quantity: 3 },
+        { product: products[5] ?? products[1]!, quantity: 6 },
+      ],
+      notes: 'Awaiting final board selection.',
+    },
+  ];
+
+  const insertQuote = db.prepare(
+    `INSERT INTO quotations
+       (number, customer_id, warehouse_id, status, quote_date, valid_until,
+        subtotal_cents, tax_cents, total_cents, notes, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertLine = db.prepare(
+    `INSERT INTO quotation_lines
+       (quotation_id, product_id, description, quantity, unit_price_cents, tax_rate_bp,
+        line_subtotal_cents, line_tax_cents, line_total_cents)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+
+  db.transaction(() => {
+    for (const quote of quotes) {
+      const lines = quote.lines.map((line) => ({
+        ...line,
+        totals: lineTotals(line.quantity, line.product.sale_price_cents, line.product.rate_bp),
+      }));
+      const subtotal = lines.reduce((total, line) => total + line.totals.subtotalCents, 0);
+      const tax = lines.reduce((total, line) => total + line.totals.taxCents, 0);
+      const result = insertQuote.run(
+        nextNumber('quotation'),
+        quote.customer.id,
+        warehouse?.id ?? null,
+        quote.status,
+        quote.date,
+        addDays(quote.date, 30),
+        subtotal,
+        tax,
+        subtotal + tax,
+        quote.notes,
+        adminId,
+      );
+      const quotationId = Number(result.lastInsertRowid);
+      for (const line of lines) {
+        insertLine.run(
+          quotationId,
+          line.product.id,
+          line.product.name,
+          line.quantity,
+          line.product.sale_price_cents,
+          line.product.rate_bp,
+          line.totals.subtotalCents,
+          line.totals.taxCents,
+          line.totals.totalCents,
+        );
+      }
+    }
+  })();
+}
+
+function seedCreditNotes(adminId: number | null): void {
+  const count = db.prepare('SELECT COUNT(*) AS count FROM credit_notes').get() as { count: number };
+  if (count.count > 0) return;
+  const invoice = db
+    .prepare(
+      `SELECT i.id, i.number, i.partner_id, i.total_cents
+       FROM invoices i
+       WHERE i.direction = 'sale' AND i.status IN ('open', 'paid') AND i.total_cents >= 100000
+       ORDER BY i.id DESC LIMIT 1`,
+    )
+    .get() as { id: number; number: string; partner_id: number; total_cents: number } | undefined;
+  if (!invoice) return;
+
+  const net = Math.min(25_000, Math.floor(invoice.total_cents / 2));
+  const tax = Math.round(net * 0.15);
+  const total = net + tax;
+  const issueDate = '2026-11-04';
+
+  db.transaction(() => {
+    const result = db
+      .prepare(
+        `INSERT INTO credit_notes
+           (number, invoice_id, partner_id, issue_date, subtotal_cents, tax_cents, total_cents,
+            reason, status, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?)`,
+      )
+      .run(
+        nextNumber('credit_note'),
+        invoice.id,
+        invoice.partner_id,
+        issueDate,
+        net,
+        tax,
+        total,
+        'Short delivery — damaged board returned to branch',
+        adminId,
+      );
+    const creditId = Number(result.lastInsertRowid);
+    const journalId = postJournalEntry({
+      journalCode: 'GEN',
+      entryDate: issueDate,
+      description: `Credit note against ${invoice.number}`,
+      sourceType: 'credit_note',
+      sourceId: creditId,
+      userId: adminId ?? undefined,
+      items: [
+        {
+          accountId: accountByCode('4000').id,
+          debitCents: net,
+          description: 'Credit note — revenue reversal',
+        },
+        {
+          accountId: accountByCode('2100').id,
+          debitCents: tax,
+          description: 'Credit note — VAT output reversal',
+        },
+        {
+          accountId: accountByCode('1100').id,
+          creditCents: total,
+          description: `Credit note against ${invoice.number}`,
+        },
+      ],
+    });
+    db.prepare('UPDATE credit_notes SET journal_entry_id = ? WHERE id = ?').run(
+      journalId,
+      creditId,
+    );
+  })();
+}
+
+function seedWorkshopJobs(adminId: number | null): void {
+  const count = db.prepare('SELECT COUNT(*) AS count FROM workshop_jobs').get() as {
+    count: number;
+  };
+  if (count.count > 0) return;
+  const customers = db
+    .prepare('SELECT id FROM partners WHERE is_customer = 1 ORDER BY id LIMIT 3')
+    .all() as { id: number }[];
+  if (customers.length === 0) return;
+  const paidInvoice = db
+    .prepare(
+      "SELECT id FROM invoices WHERE direction = 'sale' AND status = 'paid' ORDER BY id DESC LIMIT 1",
+    )
+    .get() as { id: number } | undefined;
+  const openInvoice = db
+    .prepare(
+      "SELECT id FROM invoices WHERE direction = 'sale' AND status = 'open' ORDER BY id DESC LIMIT 1",
+    )
+    .get() as { id: number } | undefined;
+  const lead = db
+    .prepare("SELECT id FROM users WHERE email = 'workshop.lead@jabulani.local'")
+    .get() as { id: number } | undefined;
+
+  const jobs = [
+    {
+      title: 'Kitchen carcasses — cut and edge',
+      status: 'ready',
+      priority: 'high',
+      dueDate: '2026-11-06',
+      customerId: customers[0]!.id,
+      invoiceId: paidInvoice?.id ?? null,
+      quoted: 850_000,
+      material: 320_000,
+      labour: 180_000,
+      expense: 40_000,
+      cuttingList:
+        '18mm White melamine — 12 carcass sides 720x560, 6 shelves 560x520, 4 backs 720x560.\nEdge band all front edges 22mm ABS white. Grain direction vertical.',
+    },
+    {
+      title: 'Wardrobe panels — awaiting payment',
+      status: 'awaiting_payment',
+      priority: 'medium',
+      dueDate: '2026-11-12',
+      customerId: customers[1]?.id ?? customers[0]!.id,
+      invoiceId: openInvoice?.id ?? null,
+      quoted: 640_000,
+      material: 240_000,
+      labour: 120_000,
+      expense: 25_000,
+      cuttingList:
+        '16mm Oak melamine — 8 wardrobe sides 2100x600, 4 tops 1200x600, 2 doors 2100x595.\nEdge band exposed edges with 22mm oak ABS. Check grain before cutting.',
+    },
+  ];
+  const operations = [
+    'Cutting list check',
+    'Panel cutting',
+    'Edge banding',
+    'Assembly',
+    'Quality check',
+    'Collection',
+  ];
+
+  const insertJob = db.prepare(
+    `INSERT INTO workshop_jobs
+       (number, customer_id, invoice_id, title, status, priority, due_date, assigned_to,
+        payment_required, quoted_cents, material_cost_cents, labour_cost_cents,
+        expense_cost_cents, cutting_list_notes, notes, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertOperation = db.prepare(
+    `INSERT INTO workshop_job_operations (job_id, name, sequence, status, assigned_to)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+  const insertFile = db.prepare(
+    `INSERT INTO workshop_job_files (job_id, filename, mime_type, size_bytes, content, uploaded_by)
+     VALUES (?, ?, 'text/csv', ?, ?, ?)`,
+  );
+
+  db.transaction(() => {
+    for (const job of jobs) {
+      const result = insertJob.run(
+        nextNumber('workshop_job'),
+        job.customerId,
+        job.invoiceId,
+        job.title,
+        job.status,
+        job.priority,
+        job.dueDate,
+        lead?.id ?? null,
+        job.quoted,
+        job.material,
+        job.labour,
+        job.expense,
+        job.cuttingList,
+        job.status === 'ready'
+          ? 'All operations complete. Customer notified for collection.'
+          : 'Release once the linked invoice is paid.',
+        adminId,
+      );
+      const jobId = Number(result.lastInsertRowid);
+      operations.forEach((name, index) => {
+        insertOperation.run(
+          jobId,
+          name,
+          index + 1,
+          job.status === 'ready' ? 'done' : 'pending',
+          lead?.id ?? null,
+        );
+      });
+      const csv = `item,description,width_mm,height_mm,qty,edge\n1,Carcass side,720,560,12,front\n2,Shelf,560,520,6,front\n`;
+      insertFile.run(
+        jobId,
+        `WS-${String(jobId).padStart(5, '0')}-cutting-list.csv`,
+        Buffer.byteLength(csv),
+        Buffer.from(csv),
+        adminId,
+      );
+    }
+  })();
+}
+
 function main(): void {
   const name = companyName();
   const jabulani = /jabulani/i.test(name);
+  const logo = jabulani ? '/jabulani-logo.svg' : '/africoach-logo.svg';
+  const existingLogo = db.prepare("SELECT value FROM settings WHERE key = 'company_logo'").get() as
+    { value: string } | undefined;
+  if (!existingLogo?.value) {
+    db.prepare(
+      `INSERT INTO settings (key, value) VALUES ('company_logo', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    ).run(logo);
+  }
   linkDemoLogins();
+  updateProductAttributes();
   seedExpenses(adminUserId(), jabulani);
   seedAttendance();
   seedBank(jabulani);
+  seedQuotations(adminUserId());
+  seedCreditNotes(adminUserId());
+  if (jabulani) seedWorkshopJobs(adminUserId());
   console.log(`Demo extras ready for ${name}.`);
 }
 

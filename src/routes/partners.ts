@@ -86,7 +86,12 @@ partnersRouter.get(
     const invoices = db
       .prepare(
         `SELECT id, number, issue_date, due_date, total_cents, amount_paid_cents,
-                (total_cents - amount_paid_cents) AS outstanding_cents, status
+                COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
+                          WHERE c.invoice_id = invoices.id AND c.status = 'posted'), 0) AS credited_cents,
+                (total_cents - amount_paid_cents -
+                  COALESCE((SELECT SUM(c.total_cents) FROM credit_notes c
+                            WHERE c.invoice_id = invoices.id AND c.status = 'posted'), 0)) AS outstanding_cents,
+                status
          FROM invoices WHERE partner_id = ? AND direction = ? AND status <> 'void' AND issue_date BETWEEN ? AND ?
          ORDER BY issue_date, id`,
       )
@@ -98,8 +103,18 @@ partnersRouter.get(
          ORDER BY payment_date, id`,
       )
       .all(id, direction === 'sale' ? 'in' : 'out', from, to);
+    const creditNotes = db
+      .prepare(
+        `SELECT c.id, c.number, c.issue_date, c.subtotal_cents, c.tax_cents, c.total_cents,
+                c.reason, i.number AS invoice_number
+         FROM credit_notes c JOIN invoices i ON i.id = c.invoice_id
+         WHERE c.partner_id = ? AND i.direction = ? AND c.status = 'posted'
+           AND c.issue_date BETWEEN ? AND ?
+         ORDER BY c.issue_date, c.id`,
+      )
+      .all(id, direction, from, to);
 
-    res.json({ partner, direction, from, to, invoices, payments });
+    res.json({ partner, direction, from, to, invoices, payments, creditNotes });
   }),
 );
 

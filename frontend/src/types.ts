@@ -213,6 +213,7 @@ export interface Invoice {
   tax_cents: number;
   total_cents: number;
   amount_paid_cents: number;
+  credited_cents?: number;
   outstanding_cents?: number;
   overdue?: number;
   notes: string | null;
@@ -1161,4 +1162,30 @@ export interface ImportResult {
   updated: number;
   total: number;
   errors: string[];
+}
+
+export interface BranchPerformanceRow {
+  warehouse_id: number | null;
+  warehouse_code: string;
+  warehouse_name: string;
+  sales_cents: number;
+  vat_cents: number;
+  invoices: number;
+  purchases_cents: number;
+  bills: number;
+  cogs_cents: number;
+  gross_profit_cents: number;
+  margin_bp: number;
+}
+
+export interface BranchPerformance {
+  from: string;
+  to: string;
+  rows: BranchPerformanceRow[];
+  totals: {
+    sales_cents: number;
+    purchases_cents: number;
+    cogs_cents: number;
+    gross_profit_cents: number;
+  };
 }

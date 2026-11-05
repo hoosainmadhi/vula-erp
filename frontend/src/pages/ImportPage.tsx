@@ -10,7 +10,19 @@ import {
   inputCls,
   PageHeader,
 } from '../components/ui';
-import type { ImportResult } from '../types';
+import { today } from '../lib/format';
+
+type Kind = 'products' | 'partners' | 'opening-stock' | 'opening-balances';
+
+interface ImportResult {
+  created?: number;
+  updated?: number;
+  total?: number;
+  imported?: number;
+  items?: number;
+  journalEntryId?: number;
+  errors: string[];
+}
 
 const PRODUCT_SAMPLE = `sku,name,category,sale_price,cost,barcode,brand,colour,size,thickness
 JB-MDF-16-WH,White melamine 16mm,Boards,899.00,620.00,6001234567890,Jabulani,White,2440x1220,16`;
@@ -18,15 +30,32 @@ JB-MDF-16-WH,White melamine 16mm,Boards,899.00,620.00,6001234567890,Jabulani,Whi
 const PARTNER_SAMPLE = `name,email,phone,vat_number,address_line1,city,province,postal_code,is_customer,is_supplier
 Acme Kitchens,orders@acme.co.za,0115550100,4123456789,12 Main Road,Johannesburg,Gauteng,2001,true,false`;
 
+const STOCK_SAMPLE = `sku,location_code,quantity,unit_cost
+JB-BD-1001,STOCK,10,850.00
+JB-ED-2001,STOCK,25,120.00`;
+
+const BALANCE_SAMPLE = `account_code,debit,credit,description
+1000,250000.00,,Opening bank balance
+1200,85000.00,,Opening stock
+3000,,335000.00,Opening equity`;
+
+const SAMPLES: Record<Kind, string> = {
+  products: PRODUCT_SAMPLE,
+  partners: PARTNER_SAMPLE,
+  'opening-stock': STOCK_SAMPLE,
+  'opening-balances': BALANCE_SAMPLE,
+};
+
 export default function ImportPage() {
-  const [kind, setKind] = useState<'products' | 'partners'>('products');
+  const [kind, setKind] = useState<Kind>('products');
   const [csv, setCsv] = useState('');
+  const [entryDate, setEntryDate] = useState(today());
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const sample = kind === 'products' ? PRODUCT_SAMPLE : PARTNER_SAMPLE;
+  const sample = SAMPLES[kind];
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -34,7 +63,10 @@ export default function ImportPage() {
     setError(null);
     setResult(null);
     try {
-      const response = await api.post<ImportResult>(`/imports/${kind}`, { csv });
+      const response = await api.post<ImportResult>(`/imports/${kind}`, {
+        csv,
+        ...(kind === 'opening-balances' ? { entryDate } : {}),
+      });
       setResult(response);
     } catch (err) {
       setError(errorMessage(err));
@@ -52,7 +84,7 @@ export default function ImportPage() {
     <>
       <PageHeader
         title="Data import"
-        subtitle="Load products or partners from CSV, including Odoo exports"
+        subtitle="Load products, partners, opening stock and opening balances from CSV"
       />
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
@@ -60,19 +92,31 @@ export default function ImportPage() {
           <form onSubmit={submit} className="space-y-3">
             {error ? <ErrorBox message={error} /> : null}
             <div className="flex flex-wrap items-end gap-2">
-              <Field label="What are you importing?" className="w-56">
+              <Field label="What are you importing?" className="w-64">
                 <select
                   className={inputCls}
                   value={kind}
                   onChange={(e) => {
-                    setKind(e.target.value as 'products' | 'partners');
+                    setKind(e.target.value as Kind);
                     setResult(null);
                   }}
                 >
                   <option value="products">Products</option>
                   <option value="partners">Customers & suppliers</option>
+                  <option value="opening-stock">Opening stock</option>
+                  <option value="opening-balances">Opening balances</option>
                 </select>
               </Field>
+              {kind === 'opening-balances' ? (
+                <Field label="Journal date" className="w-44">
+                  <input
+                    className={inputCls}
+                    type="date"
+                    value={entryDate}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                  />
+                </Field>
+              ) : null}
               <input
                 ref={fileRef}
                 type="file"
@@ -103,7 +147,7 @@ export default function ImportPage() {
             </Field>
             <div className="flex justify-end">
               <button type="submit" className={btnPrimary} disabled={busy || !csv.trim()}>
-                {busy ? 'Importing…' : `Import ${kind}`}
+                {busy ? 'Importing…' : `Import ${kind.replace('-', ' ')}`}
               </button>
             </div>
           </form>
@@ -114,19 +158,42 @@ export default function ImportPage() {
             <Card className="p-4">
               <p className="text-sm font-bold text-slate-900">Import complete</p>
               <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg bg-emerald-50 p-2">
-                  <p className="text-xs text-emerald-700">Created</p>
-                  <p className="text-lg font-bold text-emerald-800">{result.created}</p>
-                </div>
-                <div className="rounded-lg bg-sky-50 p-2">
-                  <p className="text-xs text-sky-700">Updated</p>
-                  <p className="text-lg font-bold text-sky-800">{result.updated}</p>
-                </div>
-                <div className="rounded-lg bg-slate-100 p-2">
-                  <p className="text-xs text-slate-600">Rows</p>
-                  <p className="text-lg font-bold text-slate-800">{result.total}</p>
-                </div>
+                {result.created !== undefined ? (
+                  <div className="rounded-lg bg-emerald-50 p-2">
+                    <p className="text-xs text-emerald-700">Created</p>
+                    <p className="text-lg font-bold text-emerald-800">{result.created}</p>
+                  </div>
+                ) : null}
+                {result.updated !== undefined ? (
+                  <div className="rounded-lg bg-sky-50 p-2">
+                    <p className="text-xs text-sky-700">Updated</p>
+                    <p className="text-lg font-bold text-sky-800">{result.updated}</p>
+                  </div>
+                ) : null}
+                {result.imported !== undefined ? (
+                  <div className="rounded-lg bg-emerald-50 p-2">
+                    <p className="text-xs text-emerald-700">Stock lines</p>
+                    <p className="text-lg font-bold text-emerald-800">{result.imported}</p>
+                  </div>
+                ) : null}
+                {result.items !== undefined ? (
+                  <div className="rounded-lg bg-emerald-50 p-2">
+                    <p className="text-xs text-emerald-700">Journal lines</p>
+                    <p className="text-lg font-bold text-emerald-800">{result.items}</p>
+                  </div>
+                ) : null}
+                {result.total !== undefined ? (
+                  <div className="rounded-lg bg-slate-100 p-2">
+                    <p className="text-xs text-slate-600">Rows</p>
+                    <p className="text-lg font-bold text-slate-800">{result.total}</p>
+                  </div>
+                ) : null}
               </div>
+              {result.journalEntryId ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Posted as journal entry #{result.journalEntryId}.
+                </p>
+              ) : null}
               {result.errors.length ? (
                 <div className="mt-3">
                   <p className="text-xs font-semibold text-red-600">
@@ -170,7 +237,7 @@ export default function ImportPage() {
                   <span className="font-mono">tax_rate_bp</span>
                 </li>
               </ul>
-            ) : (
+            ) : kind === 'partners' ? (
               <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
                 <li>
                   <span className="font-mono">name</span> (required)
@@ -192,10 +259,40 @@ export default function ImportPage() {
                   <span className="font-mono">is_supplier</span>
                 </li>
               </ul>
+            ) : kind === 'opening-stock' ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                <li>
+                  <span className="font-mono">sku</span> (required)
+                </li>
+                <li>
+                  <span className="font-mono">quantity</span> (required; negative removes stock)
+                </li>
+                <li>
+                  <span className="font-mono">location_code</span> or{' '}
+                  <span className="font-mono">warehouse_code</span> (defaults to the first location)
+                </li>
+                <li>
+                  <span className="font-mono">unit_cost</span> (defaults to the product cost)
+                </li>
+              </ul>
+            ) : (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                <li>
+                  <span className="font-mono">account_code</span> (required)
+                </li>
+                <li>
+                  <span className="font-mono">debit</span> or{' '}
+                  <span className="font-mono">credit</span> in rand
+                </li>
+                <li>
+                  <span className="font-mono">description</span>
+                </li>
+                <li>Debits and credits must balance; the entry is posted immediately.</li>
+              </ul>
             )}
             <p className="mt-3 text-xs text-slate-400">
-              Existing products are matched by SKU and partners by name, so re-importing updates
-              rather than duplicates.
+              Products are matched by SKU and partners by name, so re-importing updates rather than
+              duplicates. Opening stock and balances are posted as new entries.
             </p>
           </Card>
         </div>

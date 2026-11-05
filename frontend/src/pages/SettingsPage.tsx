@@ -25,6 +25,7 @@ interface FormState {
   company_email: string;
   company_phone: string;
   company_address: string;
+  company_logo: string;
   currency: string;
   vatRatePercent: string;
   invoice_due_days: string;
@@ -39,6 +40,7 @@ const EMPTY_FORM: FormState = {
   company_email: '',
   company_phone: '',
   company_address: '',
+  company_logo: '',
   currency: 'ZAR',
   vatRatePercent: '15',
   invoice_due_days: '30',
@@ -55,6 +57,7 @@ function formFromSettings(settings: Record<string, string>): FormState {
     company_email: settings.company_email ?? '',
     company_phone: settings.company_phone ?? '',
     company_address: settings.company_address ?? '',
+    company_logo: settings.company_logo ?? '',
     currency: settings.currency ?? 'ZAR',
     vatRatePercent: String((Number.isFinite(rateBp) ? rateBp : 1500) / 100),
     invoice_due_days: settings.invoice_due_days ?? '30',
@@ -77,6 +80,13 @@ export default function SettingsPage() {
 
   const update = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }));
 
+  const readLogo = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => update({ company_logo: String(reader.result ?? '') });
+    reader.readAsDataURL(file);
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -90,6 +100,7 @@ export default function SettingsPage() {
         company_email: form.company_email,
         company_phone: form.company_phone,
         company_address: form.company_address,
+        company_logo: form.company_logo,
         currency: form.currency || 'ZAR',
         vat_rate_bp: String(Math.round((Number(form.vatRatePercent) || 0) * 100)),
         invoice_due_days: String(Math.max(0, Math.round(Number(form.invoice_due_days) || 0))),
@@ -149,6 +160,35 @@ export default function SettingsPage() {
                 onChange={(e) => update({ company_name: e.target.value })}
                 required
               />
+            </Field>
+            <Field
+              label="Logo"
+              hint="Used on printed quotations, invoices, credit notes and statements."
+            >
+              <div className="flex gap-2">
+                <input
+                  className={inputCls}
+                  value={form.company_logo}
+                  onChange={(e) => update({ company_logo: e.target.value })}
+                  placeholder="/jabulani-logo.svg or https://…"
+                />
+                <label className={`${btnSecondary} cursor-pointer whitespace-nowrap`}>
+                  Upload
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => readLogo(e.target.files?.[0])}
+                  />
+                </label>
+              </div>
+              {form.company_logo ? (
+                <img
+                  src={form.company_logo}
+                  alt="Company logo preview"
+                  className="mt-2 h-14 w-auto rounded border border-slate-200 bg-white p-1 object-contain"
+                />
+              ) : null}
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Registration number">

@@ -15,6 +15,7 @@ const TEXT_KEYS = new Set([
   'company_email',
   'company_phone',
   'company_address',
+  'company_logo',
   'currency',
 ]);
 

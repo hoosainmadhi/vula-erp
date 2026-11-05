@@ -25,16 +25,18 @@ The host proxy on port 3290 routes:
 ## What is seeded
 
 - Company profile: Jabulani Boards, Johannesburg HQ and Eastern Cape branch
-- 29 products across Boards, Edging, Hardware, Decorative, Furniture and Services
+- 29 products across Boards, Edging, Hardware, Decorative, Furniture and Services, with brand, colour, size and thickness attributes populated
 - 2 warehouses / stock locations with opening stock
 - 14 partners: 7 trade customers and 6 suppliers
 - 5 purchase orders (draft, confirmed, received), goods receipts and supplier bills
 - 7 sales orders (draft, confirmed, fulfilled, invoiced)
+- 3 quotations (sent, accepted, draft) and 1 posted credit note
 - 22 invoices, 20 payments and 42 journal entries across June–November 2026
 - 6 employees across Management, Sales, Finance and Workshop
 - Attendance register for the last three working days
 - 5 operating expenses (rent, utilities, transport, consumables, repairs)
 - 1 bank account with 5 statement lines ready to reconcile
+- 2 workshop jobs with operations and cutting-list files
 - 3 projects: Sandton kitchen renovation, Rosebank walk-in wardrobe, East London office fit-out
 - 1 BOM and 4 manufacturing orders for a cut-and-edge workshop job
 - 2 POS registers — Johannesburg and Eastern Cape
@@ -63,8 +65,21 @@ cutting lists and mark jobs collected. The admin can also see all jobs.
 Branches are modelled as warehouses:
 
 - **Inventory → Stock on hand** has an All branches / Johannesburg HQ / Eastern Cape filter
-- **Sales orders**, **purchase orders** and **invoices** now have a Branch column and filter
-- New orders can be captured against a branch
+- **Inventory → Transfer stock** moves stock between locations
+- **Sales orders**, **purchase orders** and **invoices** have a Branch column and filter
+- **Accounting → Reports → Branches** shows sales, purchases, cost of sales and gross margin per branch
+- Users can be scoped to one branch on the Users page
+
+## Branded documents
+
+The company logo is set in **Settings → Company profile**. Printable documents are
+available from their screens:
+
+- Quotations → Print / PDF
+- Invoices → Print / PDF
+- Credit notes → Print
+- Partner statement → Print / PDF
+- Workshop job card → Print job card
 
 ## Employee self-service
 
@@ -117,8 +132,10 @@ DB_PATH=data/jabulani-demo.db npx tsx scripts/seed-demo-extras.ts
 
 - This is a **foundation demo**, not a finished Odoo replacement.
 - Products are flat SKUs with brand/colour/size/thickness fields, not full variants.
-- The workshop has a dedicated job-card workflow; the Manufacturing module still
-  exists separately for BOMs and production orders.
 - Bank reconciliation matches statement lines to posted journal entries; it does
-  not import OFX/QIF or auto-suggest matches yet.
+  not import OFX/QIF or auto-suggest matches beyond amount ordering yet.
+- Opening stock and opening balances can be imported; historical sales/purchase
+  documents are not imported from Odoo.
+- Branch performance uses invoice revenue and stock-move cost of sales; expenses
+  and payroll are not allocated to branches.
 - The public site is a CMS, not an e-commerce storefront.

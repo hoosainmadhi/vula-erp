@@ -99,8 +99,15 @@ creditNotesRouter.post(
       | undefined;
     if (!invoice) throw notFound('Invoice not found');
     if (invoice.status === 'void') throw new ValidationError('Cannot credit a void invoice');
-    if (total > invoice.total_cents) {
-      throw new ValidationError('Credit note cannot exceed the invoice total');
+    const credited = db
+      .prepare(
+        "SELECT COALESCE(SUM(total_cents), 0) AS total FROM credit_notes WHERE invoice_id = ? AND status = 'posted'",
+      )
+      .get(invoiceId) as { total: number };
+    if (total + credited.total > invoice.total_cents) {
+      throw new ValidationError(
+        `Credit note cannot exceed the invoice total (already credited ${credited.total} cents)`,
+      );
     }
 
     const id = db.transaction(() => {

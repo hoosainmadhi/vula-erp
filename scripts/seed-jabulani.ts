@@ -543,21 +543,55 @@ const products = new Map<string, number>();
 const productCosts = new Map<string, number>();
 const productPrices = new Map<string, number>();
 
+function productAttributes(product: ProductSeed): {
+  brand: string | null;
+  colour: string | null;
+  size: string | null;
+  thickness: string | null;
+} {
+  if (product.category === 'Services') {
+    return { brand: product.brand || null, colour: null, size: null, thickness: null };
+  }
+  let colour: string | null = null;
+  let size: string | null = null;
+  let thickness: string | null = null;
+  for (const part of product.spec.split('·').map((value) => value.trim())) {
+    if (!part) continue;
+    if (/^\d+(?:\.\d+)?mm$/i.test(part)) {
+      thickness = part;
+    } else if (/^\d+\s*[x×]\s*\d+/i.test(part)) {
+      size = part.replace(/\s*[x×]\s*/i, 'x');
+    } else if (
+      !colour &&
+      !/^(pack of|per |made to order|clip-on|cut |cutting |on-site|full extension|hot melt)/i.test(
+        part,
+      )
+    ) {
+      colour = part;
+    }
+  }
+  return { brand: product.brand || null, colour, size, thickness };
+}
+
 function insertProducts(): void {
   const standardTax = (
     db.prepare("SELECT id FROM tax_rates WHERE name = 'Standard VAT 15%'").get() as { id: number }
   ).id;
   const insert = db.prepare(
     `INSERT INTO products
-       (sku, barcode, name, description, category_id, type, uom, sale_price_cents, cost_cents,
-        tax_rate_id, track_inventory, reorder_level, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+       (sku, barcode, name, description, brand, colour, size, thickness, category_id, type, uom,
+        sale_price_cents, cost_cents, tax_rate_id, track_inventory, reorder_level, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+  );
+  const updateAttributes = db.prepare(
+    `UPDATE products SET brand = ?, colour = ?, size = ?, thickness = ? WHERE id = ?`,
   );
   for (const product of PRODUCTS) {
     const existing = db.prepare('SELECT id FROM products WHERE sku = ?').get(product.sku) as
       { id: number } | undefined;
     const type = product.category === 'Services' ? 'service' : 'goods';
     const track = type === 'service' || product.jhb + product.ec === 0 ? 0 : 1;
+    const attributes = productAttributes(product);
     const id = existing
       ? existing.id
       : Number(
@@ -566,6 +600,10 @@ function insertProducts(): void {
             product.barcode,
             product.name,
             `Brand: ${product.brand}. ${product.spec}.`,
+            attributes.brand,
+            attributes.colour,
+            attributes.size,
+            attributes.thickness,
             category(product.category),
             type,
             product.uom ?? 'unit',
@@ -576,6 +614,13 @@ function insertProducts(): void {
             product.reorder ?? 5,
           ).lastInsertRowid,
         );
+    updateAttributes.run(
+      attributes.brand,
+      attributes.colour,
+      attributes.size,
+      attributes.thickness,
+      id,
+    );
     products.set(product.sku, id);
     productCosts.set(product.sku, product.cost);
     productPrices.set(product.sku, product.price);
@@ -1526,6 +1571,7 @@ function main(): void {
   });
 
   setting('company_name', 'Jabulani Boards');
+  setting('company_logo', '/jabulani-logo.svg');
   setting('company_registration', '2019/123456/07');
   setting('company_vat_number', '4987654321');
   setting('company_email', 'info@jabulaniboards.co.za');

@@ -12,6 +12,7 @@ import {
   requireString,
 } from '../utils/validate.js';
 import { recordAudit } from '../services/audit.js';
+import { addDays } from '../utils/dates.js';
 
 /**
  * Time Off module. Owns leave types, leave requests and leave balances.
@@ -53,6 +54,21 @@ function linkedEmployee(userId: number, email: string): LinkedEmployee {
     db.prepare('UPDATE employees SET user_id = ? WHERE id = ?').run(userId, employee.id);
   }
   return employee;
+}
+
+/** Mark weekdays in an approved leave range as leave on the attendance register. */
+function markLeaveAttendance(employeeId: number, startDate: string, endDate: string): void {
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO attendance (employee_id, work_date, status, hours, notes)
+     VALUES (?, ?, 'leave', 0, 'Approved leave')`,
+  );
+  let date = startDate;
+  while (date <= endDate) {
+    const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) insert.run(employeeId, date);
+    date = addDays(date, 1);
+  }
 }
 
 function balancesFor(employeeId: number, year: number) {
@@ -366,15 +382,31 @@ leaveRouter.post(
     if (!status) throw new ValidationError('Unknown leave action');
 
     const db = getDb();
-    const request = db.prepare('SELECT id, status FROM leave_requests WHERE id = ?').get(id) as
-      { id: number; status: string } | undefined;
+    const request = db
+      .prepare(
+        'SELECT id, status, employee_id, start_date, end_date FROM leave_requests WHERE id = ?',
+      )
+      .get(id) as
+      | {
+          id: number;
+          status: string;
+          employee_id: number;
+          start_date: string;
+          end_date: string;
+        }
+      | undefined;
     if (!request) throw notFound('Leave request not found');
     if (request.status !== 'pending')
       throw new ValidationError('Only pending requests can be changed');
 
-    db.prepare(
-      "UPDATE leave_requests SET status = ?, approved_by = ?, updated_at = datetime('now') WHERE id = ?",
-    ).run(status, status === 'approved' ? req.user!.id : null, id);
+    db.transaction(() => {
+      db.prepare(
+        "UPDATE leave_requests SET status = ?, approved_by = ?, updated_at = datetime('now') WHERE id = ?",
+      ).run(status, status === 'approved' ? req.user!.id : null, id);
+      if (status === 'approved') {
+        markLeaveAttendance(request.employee_id, request.start_date, request.end_date);
+      }
+    })();
     recordAudit(req.user!.id, status, 'leave_request', id);
     res.json({ ok: true, status });
   }),

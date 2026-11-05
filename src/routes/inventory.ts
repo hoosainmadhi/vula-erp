@@ -1,8 +1,13 @@
 import { Router } from 'express';
 import { getDb } from '../db.js';
-import { authenticate, requirePermission } from '../middleware/auth.js';
+import {
+  authenticate,
+  branchWarehouseId,
+  effectiveWarehouseId,
+  requirePermission,
+} from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
-import { ValidationError, notFound } from '../utils/errors.js';
+import { ValidationError, HttpError, notFound } from '../utils/errors.js';
 import {
   optionalInt,
   optionalString,
@@ -11,7 +16,7 @@ import {
   requireNumber,
   requireString,
 } from '../utils/validate.js';
-import { adjustStock } from '../services/stock.js';
+import { adjustStock, recordMove } from '../services/stock.js';
 
 export const inventoryRouter = Router();
 inventoryRouter.use(authenticate);
@@ -21,7 +26,12 @@ inventoryRouter.get(
   requirePermission('products.view'),
   asyncHandler(async (_req, res) => {
     const db = getDb();
-    const warehouses = db.prepare('SELECT * FROM warehouses ORDER BY name').all() as {
+    const scope = branchWarehouseId(_req.user!);
+    const warehouses = (
+      scope === null
+        ? db.prepare('SELECT * FROM warehouses ORDER BY name').all()
+        : db.prepare('SELECT * FROM warehouses WHERE id = ? ORDER BY name').all(scope)
+    ) as {
       id: number;
     }[];
     const locations = db
@@ -149,7 +159,9 @@ inventoryRouter.get(
     let stockJoin = '';
     let stockFilter = '';
     const locationId = req.query.locationId ? Number(req.query.locationId) : null;
-    const warehouseId = req.query.warehouseId ? Number(req.query.warehouseId) : null;
+    let warehouseId = req.query.warehouseId ? Number(req.query.warehouseId) : null;
+    const scope = branchWarehouseId(req.user!);
+    if (scope !== null) warehouseId = scope;
     if (locationId) {
       stockFilter = 'AND sl.location_id = ?';
       stockParams.push(locationId);
@@ -202,6 +214,15 @@ inventoryRouter.get(
     if (req.query.locationId) {
       where.push('m.location_id = ?');
       params.push(Number(req.query.locationId));
+    }
+    if (typeof req.query.moveType === 'string' && req.query.moveType !== '') {
+      where.push('m.move_type = ?');
+      params.push(req.query.moveType);
+    }
+    const branchScope = branchWarehouseId(req.user!);
+    if (branchScope !== null) {
+      where.push('w.id = ?');
+      params.push(branchScope);
     }
     const limit = Math.min(Number(req.query.limit ?? 100), 500);
     const moves = db
@@ -279,6 +300,88 @@ inventoryRouter.post(
     res
       .status(201)
       .json({ move: getDb().prepare('SELECT * FROM stock_moves WHERE id = ?').get(moveId) });
+  }),
+);
+
+inventoryRouter.post(
+  '/transfers',
+  requirePermission('inventory.adjust'),
+  asyncHandler(async (req, res) => {
+    const productId = requireInt(req.body?.productId, 'Product', 1);
+    const fromLocationId = requireInt(req.body?.fromLocationId, 'From location', 1);
+    const toLocationId = requireInt(req.body?.toLocationId, 'To location', 1);
+    const quantity = requireNumber(req.body?.quantity, 'Quantity', 0.0001);
+    if (fromLocationId === toLocationId) {
+      throw new ValidationError('Choose two different locations');
+    }
+    const db = getDb();
+    const product = db
+      .prepare('SELECT id, name, sku, cost_cents FROM products WHERE id = ?')
+      .get(productId) as { id: number; name: string; sku: string; cost_cents: number } | undefined;
+    if (!product) throw notFound('Product not found');
+    const locations = db
+      .prepare(
+        `SELECT l.id, l.name, l.warehouse_id, w.name AS warehouse_name
+         FROM stock_locations l JOIN warehouses w ON w.id = l.warehouse_id
+         WHERE l.id IN (?, ?)`,
+      )
+      .all(fromLocationId, toLocationId) as {
+      id: number;
+      name: string;
+      warehouse_id: number;
+      warehouse_name: string;
+    }[];
+    if (locations.length !== 2) throw notFound('Stock location not found');
+    const from = locations.find((location) => location.id === fromLocationId)!;
+    const to = locations.find((location) => location.id === toLocationId)!;
+    const scope = branchWarehouseId(req.user!);
+    if (scope !== null && (from.warehouse_id !== scope || to.warehouse_id !== scope)) {
+      throw new HttpError(403, 'You can only transfer stock within your branch', 'forbidden');
+    }
+
+    const level = db
+      .prepare('SELECT quantity FROM stock_levels WHERE product_id = ? AND location_id = ?')
+      .get(productId, fromLocationId) as { quantity: number } | undefined;
+    if (!level || level.quantity < quantity) {
+      throw new ValidationError(
+        `Not enough stock at ${from.name} (available ${level?.quantity ?? 0})`,
+      );
+    }
+
+    const note = optionalString(req.body?.note, 'Note', 500);
+    const moves = db.transaction(() => {
+      const outId = recordMove({
+        productId,
+        locationId: fromLocationId,
+        quantity: -quantity,
+        moveType: 'transfer',
+        referenceType: 'transfer',
+        unitCostCents: product.cost_cents,
+        note: note ?? `Transfer to ${to.warehouse_name} / ${to.name}`,
+        userId: req.user!.id,
+      });
+      const inId = recordMove({
+        productId,
+        locationId: toLocationId,
+        quantity,
+        moveType: 'transfer',
+        referenceType: 'transfer',
+        unitCostCents: product.cost_cents,
+        note: note ?? `Transfer from ${from.warehouse_name} / ${from.name}`,
+        userId: req.user!.id,
+      });
+      return { outId, inId };
+    })();
+
+    res.status(201).json({
+      transfer: {
+        product,
+        quantity,
+        from,
+        to,
+        moves,
+      },
+    });
   }),
 );
 

@@ -28,6 +28,16 @@ quotationsRouter.use(authenticate);
 
 const STATUSES = ['draft', 'sent', 'accepted', 'expired', 'converted', 'cancelled'] as const;
 
+/** Quotations past their validity date move to expired automatically. */
+function expireQuotations(): void {
+  getDb()
+    .prepare(
+      `UPDATE quotations SET status = 'expired', updated_at = datetime('now')
+       WHERE status IN ('draft', 'sent') AND valid_until IS NOT NULL AND valid_until < date('now')`,
+    )
+    .run();
+}
+
 interface QuoteLineInput {
   productId?: number | null;
   description?: string;
@@ -141,6 +151,7 @@ quotationsRouter.get(
   '/',
   requirePermission('sales.view'),
   asyncHandler(async (req, res) => {
+    expireQuotations();
     const where: string[] = ['1 = 1'];
     const params: unknown[] = [];
     if (typeof req.query.status === 'string' && req.query.status !== 'all') {
@@ -184,6 +195,7 @@ quotationsRouter.get(
   '/:id',
   requirePermission('sales.view'),
   asyncHandler(async (req, res) => {
+    expireQuotations();
     res.json({ quotation: quoteDetail(paramId(req.params.id)) });
   }),
 );
@@ -332,6 +344,9 @@ quotationsRouter.post(
     }
     if (quotation.status === 'cancelled') {
       throw new ValidationError('Cancelled quotations cannot be converted');
+    }
+    if (quotation.status === 'expired') {
+      throw new ValidationError('Expired quotations cannot be converted');
     }
     const scope = branchWarehouseId(req.user!);
     if (scope !== null && quotation.warehouse_id !== null && quotation.warehouse_id !== scope) {

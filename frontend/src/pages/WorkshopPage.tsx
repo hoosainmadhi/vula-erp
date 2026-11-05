@@ -438,6 +438,13 @@ function JobDetail({
                 Cancel job
               </button>
             ) : null}
+            <button
+              type="button"
+              className={btnSecondary}
+              onClick={() => window.open(`/print/job-card/${job.id}`, '_blank')}
+            >
+              Print job card
+            </button>
           </div>
 
           <div>

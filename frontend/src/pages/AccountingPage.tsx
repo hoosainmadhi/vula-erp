@@ -23,6 +23,7 @@ import type {
   Account,
   AgingReport,
   BalanceSheet,
+  BranchPerformance,
   Journal,
   JournalEntry,
   JournalItem,
@@ -32,7 +33,7 @@ import type {
 } from '../types';
 
 type Tab = 'accounts' | 'journal' | 'reports';
-type ReportTab = 'trial' | 'pl' | 'balance' | 'vat' | 'aging';
+type ReportTab = 'trial' | 'pl' | 'balance' | 'vat' | 'aging' | 'branches';
 
 interface AccountLedgerResponse {
   account: { id: number; code: string; name: string; type: string };
@@ -574,6 +575,10 @@ function ReportsPanel() {
       : null,
     [asOf, agingDirection],
   );
+  const branches = useFetch<BranchPerformance>(
+    report === 'branches' ? `/accounting/reports/branches?from=${from}&to=${to}` : null,
+    [from, to],
+  );
 
   const dateRange = (
     <div className="flex flex-wrap items-end gap-2">
@@ -618,6 +623,7 @@ function ReportsPanel() {
               ['balance', 'Balance sheet'],
               ['vat', 'VAT'],
               ['aging', 'Aging'],
+              ['branches', 'Branches'],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -632,7 +638,7 @@ function ReportsPanel() {
             </button>
           ))}
         </div>
-        {report === 'pl' || report === 'vat' ? dateRange : null}
+        {report === 'pl' || report === 'vat' || report === 'branches' ? dateRange : null}
         {report === 'trial' || report === 'balance' || report === 'aging' ? asOfField : null}
         {report === 'aging' ? (
           <Field label="Ledger" className="w-44">
@@ -655,6 +661,7 @@ function ReportsPanel() {
             balance.reload();
             vat.reload();
             aging.reload();
+            branches.reload();
           }}
         >
           Refresh
@@ -966,6 +973,80 @@ function ReportsPanel() {
                 </tfoot>
               </table>
             </Card>
+          </div>
+        ) : null
+      ) : null}
+
+      {report === 'branches' ? (
+        branches.loading && !branches.data ? (
+          <Spinner />
+        ) : branches.error ? (
+          <ErrorBox message={branches.error} />
+        ) : branches.data ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Card className="p-4">
+                <p className="text-xs uppercase text-slate-500">Sales</p>
+                <p className="text-xl font-bold text-slate-900">
+                  {money(branches.data.totals.sales_cents)}
+                </p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-xs uppercase text-slate-500">Purchases</p>
+                <p className="text-xl font-bold text-slate-900">
+                  {money(branches.data.totals.purchases_cents)}
+                </p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-xs uppercase text-slate-500">Cost of sales</p>
+                <p className="text-xl font-bold text-slate-900">
+                  {money(branches.data.totals.cogs_cents)}
+                </p>
+              </Card>
+              <Card className="p-4">
+                <p className="text-xs uppercase text-slate-500">Gross profit</p>
+                <p className="text-xl font-bold text-emerald-700">
+                  {money(branches.data.totals.gross_profit_cents)}
+                </p>
+              </Card>
+            </div>
+            <Card className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-left text-sm">
+                <thead>
+                  <tr>
+                    <th className={thCls}>Branch</th>
+                    <th className={`${thCls} text-right`}>Invoices</th>
+                    <th className={`${thCls} text-right`}>Sales</th>
+                    <th className={`${thCls} text-right`}>Purchases</th>
+                    <th className={`${thCls} text-right`}>Cost of sales</th>
+                    <th className={`${thCls} text-right`}>Gross profit</th>
+                    <th className={`${thCls} text-right`}>Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {branches.data.rows.map((row) => (
+                    <tr key={row.warehouse_id ?? 'none'} className="border-t border-slate-100">
+                      <td className={`${tdCls} font-medium text-slate-800`}>
+                        {row.warehouse_name}
+                        <span className="ml-2 text-xs text-slate-400">{row.warehouse_code}</span>
+                      </td>
+                      <td className={`${tdCls} text-right`}>{row.invoices}</td>
+                      <td className={`${tdCls} text-right`}>{money(row.sales_cents)}</td>
+                      <td className={`${tdCls} text-right`}>{money(row.purchases_cents)}</td>
+                      <td className={`${tdCls} text-right`}>{money(row.cogs_cents)}</td>
+                      <td className={`${tdCls} text-right font-semibold`}>
+                        {money(row.gross_profit_cents)}
+                      </td>
+                      <td className={`${tdCls} text-right`}>{(row.margin_bp / 100).toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+            <p className="text-xs text-slate-400">
+              Sales and purchases come from posted invoices; cost of sales comes from fulfilled
+              stock moves. Expenses and payroll are not allocated to branches.
+            </p>
           </div>
         ) : null
       ) : null}
