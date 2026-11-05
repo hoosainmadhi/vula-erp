@@ -29,6 +29,73 @@ function adminUserId(): number | null {
   return row?.id ?? null;
 }
 
+/**
+ * Demo logins use role emails (sales@, accounts@) while the seeded employee
+ * records often use personal emails (yusuf@). Link or create an employee for
+ * every staff login so My Leave works for admins and staff, not just employees.
+ */
+function linkDemoLogins(): void {
+  const staffRoles = new Set([
+    'admin',
+    'sales',
+    'accountant',
+    'warehouse',
+    'workshop',
+    'hr',
+    'employee',
+  ]);
+  const users = db
+    .prepare(
+      `SELECT u.id, u.email, u.first_name, u.last_name,
+              COALESCE(GROUP_CONCAT(r.name, ','), '') AS role_names
+       FROM users u
+       LEFT JOIN user_roles ur ON ur.user_id = u.id
+       LEFT JOIN roles r ON r.id = ur.role_id
+       WHERE u.is_active = 1
+       GROUP BY u.id
+       ORDER BY u.id`,
+    )
+    .all() as {
+    id: number;
+    email: string;
+    first_name: string;
+    last_name: string;
+    role_names: string;
+  }[];
+
+  const findLinked = db.prepare('SELECT id FROM employees WHERE user_id = ?');
+  const findUnlinkedByEmail = db.prepare(
+    'SELECT id FROM employees WHERE lower(email) = lower(?) AND user_id IS NULL ORDER BY id LIMIT 1',
+  );
+  const link = db.prepare('UPDATE employees SET user_id = ? WHERE id = ?');
+  const insert = db.prepare(
+    `INSERT INTO employees
+       (employee_number, user_id, first_name, last_name, email, job_title,
+        employment_type, status, start_date)
+     VALUES (?, ?, ?, ?, ?, ?, 'permanent', 'active', '2024-01-01')`,
+  );
+
+  for (const user of users) {
+    const roles = user.role_names ? user.role_names.split(',') : [];
+    if (!roles.some((role) => staffRoles.has(role))) continue;
+    if (findLinked.get(user.id)) continue;
+
+    const byEmail = findUnlinkedByEmail.get(user.email) as { id: number } | undefined;
+    if (byEmail) {
+      link.run(user.id, byEmail.id);
+      continue;
+    }
+    insert.run(
+      nextNumber('employee'),
+      user.id,
+      user.first_name,
+      user.last_name,
+      user.email,
+      roles[0] ?? 'Staff',
+    );
+  }
+}
+
 function seedExpenses(adminId: number | null, jabulani: boolean): void {
   const count = db.prepare('SELECT COUNT(*) AS count FROM expenses').get() as { count: number };
   if (count.count > 0) return;
@@ -142,6 +209,7 @@ function seedBank(jabulani: boolean): void {
 function main(): void {
   const name = companyName();
   const jabulani = /jabulani/i.test(name);
+  linkDemoLogins();
   seedExpenses(adminUserId(), jabulani);
   seedAttendance();
   seedBank(jabulani);

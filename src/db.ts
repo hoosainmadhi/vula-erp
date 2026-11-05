@@ -1499,6 +1499,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'expenses.manage',
     'projects.view',
     'data.import',
+    'leave.self',
   ],
   sales: [
     'dashboard.view',
@@ -1512,6 +1513,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'projects.manage',
     'pos.view',
     'pos.manage',
+    'leave.self',
   ],
   warehouse: [
     'dashboard.view',
@@ -1526,6 +1528,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'manufacturing.view',
     'manufacturing.manage',
     'data.import',
+    'leave.self',
   ],
   hr: [
     'dashboard.view',
@@ -1537,6 +1540,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'recruitment.view',
     'recruitment.manage',
     'maintenance.view',
+    'leave.self',
   ],
   employee: ['leave.self'],
   workshop: ['workshop.view', 'workshop.manage', 'products.view', 'leave.self'],
