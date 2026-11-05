@@ -43,6 +43,8 @@ interface NavItem {
   permission?: string;
   module?: string;
   end?: boolean;
+  /** Roles that must not see this item (e.g. shared admin logins). */
+  excludeRoles?: string[];
 }
 
 const NAV: { heading: string; items: NavItem[] }[] = [
@@ -63,6 +65,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         icon: CalendarDays,
         permission: 'leave.self',
         module: 'time-off',
+        excludeRoles: ['admin'],
       },
     ],
   },
@@ -251,6 +254,11 @@ export default function Layout() {
   const settings = useFetch<{ settings: Record<string, string> }>('/settings');
   const companyName = settings.data?.settings.company_name ?? 'vula-erp';
 
+  const visible = (item: NavItem) =>
+    (!item.permission || can(item.permission)) &&
+    (!item.module || isEnabled(item.module)) &&
+    (!item.excludeRoles || !item.excludeRoles.some((role) => user?.roles.includes(role)));
+
   const bottomItems: NavItem[] = (
     can('dashboard.view')
       ? [
@@ -298,20 +306,15 @@ export default function Layout() {
             icon: CalendarDays,
             permission: 'leave.self',
             module: 'time-off',
+            excludeRoles: ['admin'],
           },
         ]
-  ).filter(
-    (item) =>
-      (!item.permission || can(item.permission)) && (!item.module || isEnabled(item.module)),
-  );
+  ).filter(visible);
 
   const nav = (
     <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
       {NAV.map((group) => {
-        const items = group.items.filter(
-          (item) =>
-            (!item.permission || can(item.permission)) && (!item.module || isEnabled(item.module)),
-        );
+        const items = group.items.filter(visible);
         if (items.length === 0) return null;
         return (
           <div key={group.heading}>

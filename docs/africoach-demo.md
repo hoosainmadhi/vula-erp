@@ -114,7 +114,8 @@ The seed script is in `scripts/seed-africoach.ts`. It is separate from the main
 
 Sign in as `thandi@africoach.local` / `EmployeeDemo2026!` to see **My Leave**:
 own balances, apply for leave, and cancel a pending request. Employees do not see
-the company dashboard or other employees’ leave.
+the company dashboard or other employees’ leave. The shared **admin** login does
+not show **My Leave**; use an individual staff login for self-service.
 
 ## Suggested demo flow
 

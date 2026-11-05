@@ -48,18 +48,23 @@ function Page({ children }: { children: ReactNode }) {
 function Guard({
   permission,
   module,
+  excludeRoles,
   fallback = '/',
   children,
 }: {
   permission: string;
   module?: string;
+  excludeRoles?: string[];
   fallback?: string;
   children: ReactNode;
 }) {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const { isEnabled } = useModules();
   if (!can(permission)) return <Navigate to={fallback} replace />;
   if (module && !isEnabled(module)) return <Navigate to={fallback} replace />;
+  if (excludeRoles?.some((role) => user?.roles.includes(role))) {
+    return <Navigate to={fallback} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -172,7 +177,7 @@ export default function App() {
           <Route
             path="/my-leave"
             element={
-              <Guard permission="leave.self" module="time-off">
+              <Guard permission="leave.self" module="time-off" excludeRoles={['admin']}>
                 <Page>
                   <MyLeavePage />
                 </Page>

@@ -41,9 +41,13 @@ Employees sign in with their own account and land on **My Leave**. They can see
 their own balances, apply for leave, and cancel a pending request. They do not
 see the company dashboard, other employees’ leave, or HR/admin screens.
 
+The **admin** login is a shared demo account for configuration and approvals. It
+does not show **My Leave**; use an individual staff or employee login for
+self-service. In a real deployment each person should have their own login.
+
 The employee login is linked to an employee record by matching the user email to
-the employee email. Administrators can also link manually by using the same email
-on both records.
+the employee email, or by the employee's `user_id`. Administrators can also link
+manually by using the same email on both records.
 
 ## Coolify resources
 

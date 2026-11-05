@@ -70,7 +70,8 @@ Branches are modelled as warehouses:
 
 Sign in as `thabo@jabulani.local` / `EmployeeDemo2026!` to see **My Leave**:
 own balances, apply for leave, and cancel a pending request. Employees do not see
-the company dashboard or other employees’ leave.
+the company dashboard or other employees’ leave. The shared **admin** login does
+not show **My Leave**; use an individual staff login for self-service.
 
 ## Suggested demo flow
 
