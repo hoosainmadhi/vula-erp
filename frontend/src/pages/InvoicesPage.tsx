@@ -27,7 +27,7 @@ import {
   payloadLines,
   type DraftLine,
 } from '../components/LineItemsEditor';
-import type { Invoice, InvoiceLine, Partner, Payment, Product } from '../types';
+import type { Invoice, InvoiceLine, Partner, Payment, Product, Warehouse } from '../types';
 
 interface InvoiceDetail {
   invoice: Invoice;
@@ -561,6 +561,7 @@ export default function InvoicesPage() {
   const [status, setStatus] = useState('all');
   const [overdue, setOverdue] = useState(false);
   const [query, setQuery] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
   const [creating, setCreating] = useState(false);
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
   const [paymentTarget, setPaymentTarget] = useState<Invoice | 'new' | null>(null);
@@ -572,12 +573,14 @@ export default function InvoicesPage() {
   if (status !== 'all') invoiceParams.set('status', status);
   if (overdue) invoiceParams.set('overdue', 'true');
   if (query) invoiceParams.set('q', query);
+  if (warehouseId) invoiceParams.set('warehouseId', warehouseId);
 
   const invoices = useFetch<InvoiceListResponse>(`/invoices?${invoiceParams.toString()}`, [
     direction,
     status,
     overdue,
     query,
+    warehouseId,
   ]);
   const paymentParams = new URLSearchParams();
   if (direction !== 'all') paymentParams.set('direction', direction === 'sale' ? 'in' : 'out');
@@ -587,6 +590,7 @@ export default function InvoicesPage() {
   );
   const partners = useFetch<{ partners: Partner[] }>('/partners?limit=500');
   const products = useFetch<{ products: Product[] }>('/products?limit=1000');
+  const warehouses = useFetch<{ warehouses: Warehouse[] }>('/inventory/warehouses');
 
   const openDetail = async (invoice: Invoice) => {
     setError(null);
@@ -687,6 +691,18 @@ export default function InvoicesPage() {
               <option value="paid">Paid</option>
               <option value="void">Void</option>
             </select>
+            <select
+              className={`${inputCls} w-auto`}
+              value={warehouseId}
+              onChange={(e) => setWarehouseId(e.target.value)}
+            >
+              <option value="">All branches</option>
+              {(warehouses.data?.warehouses ?? []).map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}
+                </option>
+              ))}
+            </select>
             <label className="flex items-center gap-1.5 text-sm text-slate-600">
               <input
                 type="checkbox"
@@ -727,6 +743,7 @@ export default function InvoicesPage() {
                 <tr>
                   <th className={thCls}>Number</th>
                   <th className={thCls}>Partner</th>
+                  <th className={thCls}>Branch</th>
                   <th className={thCls}>Issued</th>
                   <th className={thCls}>Due</th>
                   <th className={thCls}>Status</th>
@@ -737,7 +754,7 @@ export default function InvoicesPage() {
               </thead>
               <tbody>
                 {!invoices.data || invoices.data.invoices.length === 0 ? (
-                  <EmptyState colSpan={8} message="No invoices found." />
+                  <EmptyState colSpan={9} message="No invoices found." />
                 ) : (
                   invoices.data.invoices.map((invoice) => {
                     const outstanding =
@@ -753,6 +770,7 @@ export default function InvoicesPage() {
                         <td className={`${tdCls} font-semibold text-slate-800`}>
                           {invoice.partner_name}
                         </td>
+                        <td className={tdCls}>{invoice.warehouse_name ?? '—'}</td>
                         <td className={tdCls}>{shortDate(invoice.issue_date)}</td>
                         <td className={tdCls}>
                           {shortDate(invoice.due_date)}

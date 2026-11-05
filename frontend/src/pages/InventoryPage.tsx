@@ -26,6 +26,7 @@ export default function InventoryPage() {
   const [tab, setTab] = useState<Tab>('stock');
   const [query, setQuery] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
+  const [warehouseId, setWarehouseId] = useState('');
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [warehouseOpen, setWarehouseOpen] = useState(false);
   const [locationFor, setLocationFor] = useState<Warehouse | null>(null);
@@ -35,8 +36,9 @@ export default function InventoryPage() {
     `/inventory/stock?${new URLSearchParams({
       ...(query ? { q: query } : {}),
       ...(lowOnly ? { lowOnly: 'true' } : {}),
+      ...(warehouseId ? { warehouseId } : {}),
     }).toString()}`,
-    [query, lowOnly],
+    [query, lowOnly, warehouseId],
   );
   const moves = useFetch<{ moves: StockMove[] }>('/inventory/stock/moves?limit=200');
   const warehouses = useFetch<{ warehouses: Warehouse[] }>('/inventory/warehouses');
@@ -95,6 +97,18 @@ export default function InventoryPage() {
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
+            <select
+              className={`${inputCls} w-auto`}
+              value={warehouseId}
+              onChange={(event) => setWarehouseId(event.target.value)}
+            >
+              <option value="">All branches</option>
+              {(warehouses.data?.warehouses ?? []).map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}
+                </option>
+              ))}
+            </select>
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input
                 type="checkbox"

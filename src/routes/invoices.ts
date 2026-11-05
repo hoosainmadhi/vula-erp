@@ -5,6 +5,7 @@ import { asyncHandler } from '../utils/http.js';
 import { ValidationError, notFound } from '../utils/errors.js';
 import {
   optionalDate,
+  optionalInt,
   optionalString,
   paramId,
   requireDate,
@@ -47,6 +48,10 @@ invoicesRouter.get(
       where.push('i.partner_id = ?');
       params.push(Number(req.query.partnerId));
     }
+    if (req.query.warehouseId) {
+      where.push('i.warehouse_id = ?');
+      params.push(Number(req.query.warehouseId));
+    }
     if (req.query.from) {
       where.push('i.issue_date >= ?');
       params.push(String(req.query.from));
@@ -77,10 +82,12 @@ invoicesRouter.get(
     ).count;
     const invoices = db
       .prepare(
-        `SELECT i.*, p.name AS partner_name,
+        `SELECT i.*, p.name AS partner_name, w.name AS warehouse_name,
                 (i.total_cents - i.amount_paid_cents) AS outstanding_cents,
                 CASE WHEN i.status = 'open' AND i.due_date < date('now') THEN 1 ELSE 0 END AS overdue
-         FROM invoices i JOIN partners p ON p.id = i.partner_id
+         FROM invoices i
+         JOIN partners p ON p.id = i.partner_id
+         LEFT JOIN warehouses w ON w.id = i.warehouse_id
          ${whereSql} ORDER BY i.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset);
@@ -190,6 +197,7 @@ invoicesRouter.post(
       issueDate,
       dueDate,
       notes: optionalString(req.body?.notes, 'Notes', 5000),
+      warehouseId: optionalInt(req.body?.warehouseId, 'Branch', 1),
       lines,
       post: req.body?.post !== false,
       userId: req.user!.id,

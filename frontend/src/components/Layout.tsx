@@ -176,6 +176,13 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         module: 'manufacturing',
       },
       {
+        to: '/workshop',
+        label: 'Workshop',
+        icon: Wrench,
+        permission: 'workshop.view',
+        module: 'workshop',
+      },
+      {
         to: '/recruitment',
         label: 'Recruitment',
         icon: Briefcase,
@@ -245,6 +252,13 @@ export default function Layout() {
           },
         ]
       : [
+          {
+            to: '/workshop',
+            label: 'Workshop',
+            icon: Wrench,
+            permission: 'workshop.view',
+            module: 'workshop',
+          },
           {
             to: '/my-leave',
             label: 'My Leave',

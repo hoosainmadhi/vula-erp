@@ -58,6 +58,7 @@ function PurchaseOrderForm({
   initialLines,
   suppliers,
   products,
+  warehouses,
   onSaved,
   onClose,
 }: {
@@ -65,11 +66,15 @@ function PurchaseOrderForm({
   initialLines: OrderLine[];
   suppliers: Partner[];
   products: Product[];
+  warehouses: Warehouse[];
   onSaved: () => void;
   onClose: () => void;
 }) {
   const [supplierId, setSupplierId] = useState(() =>
     String(order?.supplier_id ?? suppliers[0]?.id ?? ''),
+  );
+  const [warehouseId, setWarehouseId] = useState(
+    String(order?.warehouse_id ?? warehouses[0]?.id ?? ''),
   );
   const [orderDate, setOrderDate] = useState(order?.order_date ?? today());
   const [expectedDate, setExpectedDate] = useState(order?.expected_date ?? addDays(today(), 7));
@@ -88,6 +93,7 @@ function PurchaseOrderForm({
     try {
       const payload = {
         supplierId: Number(supplierId),
+        warehouseId: warehouseId ? Number(warehouseId) : null,
         orderDate,
         expectedDate: expectedDate || null,
         notes: notes || null,
@@ -119,6 +125,19 @@ function PurchaseOrderForm({
             {suppliers.map((supplier) => (
               <option key={supplier.id} value={supplier.id}>
                 {supplier.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Branch">
+          <select
+            className={inputCls}
+            value={warehouseId}
+            onChange={(e) => setWarehouseId(e.target.value)}
+          >
+            {warehouses.map((warehouse) => (
+              <option key={warehouse.id} value={warehouse.id}>
+                {warehouse.name}
               </option>
             ))}
           </select>
@@ -424,6 +443,7 @@ export default function PurchaseOrdersPage() {
   const { can } = useAuth();
   const [status, setStatus] = useState('all');
   const [query, setQuery] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
   const [editing, setEditing] = useState<
     { order: PurchaseOrder; lines: OrderLine[] } | 'new' | null
   >(null);
@@ -435,10 +455,11 @@ export default function PurchaseOrdersPage() {
   const params = new URLSearchParams();
   if (status !== 'all') params.set('status', status);
   if (query) params.set('q', query);
+  if (warehouseId) params.set('warehouseId', warehouseId);
 
   const orders = useFetch<{ purchaseOrders: PurchaseOrder[]; total: number }>(
     `/purchase-orders?${params.toString()}`,
-    [status, query],
+    [status, query, warehouseId],
   );
   const suppliers = useFetch<{ partners: Partner[] }>('/partners?type=supplier&limit=500');
   const products = useFetch<{ products: Product[] }>('/products?limit=1000');
@@ -539,6 +560,18 @@ export default function PurchaseOrdersPage() {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
+        <select
+          className={`${inputCls} w-auto`}
+          value={warehouseId}
+          onChange={(event) => setWarehouseId(event.target.value)}
+        >
+          <option value="">All branches</option>
+          {(warehouses.data?.warehouses ?? []).map((warehouse) => (
+            <option key={warehouse.id} value={warehouse.id}>
+              {warehouse.name}
+            </option>
+          ))}
+        </select>
         <span className="text-sm text-slate-500">{orders.data?.total ?? 0} order(s)</span>
       </div>
 
@@ -560,6 +593,7 @@ export default function PurchaseOrdersPage() {
               <tr>
                 <th className={thCls}>Number</th>
                 <th className={thCls}>Supplier</th>
+                <th className={thCls}>Branch</th>
                 <th className={thCls}>Ordered</th>
                 <th className={thCls}>Expected</th>
                 <th className={thCls}>Status</th>
@@ -569,7 +603,7 @@ export default function PurchaseOrdersPage() {
             </thead>
             <tbody>
               {!orders.data || orders.data.purchaseOrders.length === 0 ? (
-                <EmptyState colSpan={7} message="No purchase orders found." />
+                <EmptyState colSpan={8} message="No purchase orders found." />
               ) : (
                 orders.data.purchaseOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50">
@@ -580,6 +614,7 @@ export default function PurchaseOrdersPage() {
                       <p className="font-semibold text-slate-800">{order.supplier_name}</p>
                       <p className="text-xs text-slate-400">{order.line_count ?? 0} line(s)</p>
                     </td>
+                    <td className={tdCls}>{order.warehouse_name ?? '—'}</td>
                     <td className={tdCls}>{shortDate(order.order_date)}</td>
                     <td className={tdCls}>{shortDate(order.expected_date)}</td>
                     <td className={tdCls}>
@@ -696,6 +731,7 @@ export default function PurchaseOrdersPage() {
             initialLines={editing === 'new' ? [] : editing.lines}
             suppliers={suppliers.data?.partners ?? []}
             products={products.data?.products ?? []}
+            warehouses={warehouses.data?.warehouses ?? []}
             onSaved={orders.reload}
             onClose={() => setEditing(null)}
           />

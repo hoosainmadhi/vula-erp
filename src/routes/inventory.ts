@@ -144,24 +144,42 @@ inventoryRouter.get(
       where.push('(p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)');
       params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
-    if (req.query.lowOnly === 'true') {
+
+    const stockParams: unknown[] = [];
+    let stockJoin = '';
+    let stockFilter = '';
+    const locationId = req.query.locationId ? Number(req.query.locationId) : null;
+    const warehouseId = req.query.warehouseId ? Number(req.query.warehouseId) : null;
+    if (locationId) {
+      stockFilter = 'AND sl.location_id = ?';
+      stockParams.push(locationId);
+    } else if (warehouseId) {
+      stockJoin = 'JOIN stock_locations sloc ON sloc.id = sl.location_id';
+      stockFilter = 'AND sloc.warehouse_id = ?';
+      stockParams.push(warehouseId);
+    }
+    const lowOnly = req.query.lowOnly === 'true';
+    if (lowOnly) {
       where.push(
-        'COALESCE((SELECT SUM(sl.quantity) FROM stock_levels sl WHERE sl.product_id = p.id), 0) <= p.reorder_level',
+        `COALESCE((SELECT SUM(sl.quantity) FROM stock_levels sl ${stockJoin} WHERE sl.product_id = p.id ${stockFilter}), 0) <= p.reorder_level`,
       );
     }
 
     const rows = db
       .prepare(
         `SELECT p.id, p.sku, p.name, p.uom, p.reorder_level, p.cost_cents, p.sale_price_cents,
-                c.name AS category_name,
-                COALESCE((SELECT SUM(sl.quantity) FROM stock_levels sl WHERE sl.product_id = p.id), 0) AS quantity,
-                COALESCE((SELECT SUM(sl.quantity * p.cost_cents) FROM stock_levels sl WHERE sl.product_id = p.id), 0) AS value_cents
+                p.brand, p.colour, p.size, p.thickness, c.name AS category_name,
+                COALESCE((SELECT SUM(sl.quantity) FROM stock_levels sl ${stockJoin} WHERE sl.product_id = p.id ${stockFilter}), 0) AS quantity,
+                COALESCE((SELECT SUM(sl.quantity * p.cost_cents) FROM stock_levels sl ${stockJoin} WHERE sl.product_id = p.id ${stockFilter}), 0) AS value_cents
          FROM products p
          LEFT JOIN product_categories c ON c.id = p.category_id
          WHERE ${where.join(' AND ')}
          ORDER BY p.name`,
       )
-      .all(...params) as { quantity: number; value_cents: number }[];
+      .all(...stockParams, ...stockParams, ...(lowOnly ? stockParams : []), ...params) as {
+      quantity: number;
+      value_cents: number;
+    }[];
 
     res.json({
       stock: rows,

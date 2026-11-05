@@ -56,6 +56,7 @@ function SalesOrderForm({
   initialLines,
   customers,
   products,
+  warehouses,
   onSaved,
   onClose,
 }: {
@@ -63,11 +64,15 @@ function SalesOrderForm({
   initialLines: OrderLine[];
   customers: Partner[];
   products: Product[];
+  warehouses: Warehouse[];
   onSaved: () => void;
   onClose: () => void;
 }) {
   const [customerId, setCustomerId] = useState(() =>
     String(order?.customer_id ?? customers[0]?.id ?? ''),
+  );
+  const [warehouseId, setWarehouseId] = useState(
+    String(order?.warehouse_id ?? warehouses[0]?.id ?? ''),
   );
   const [orderDate, setOrderDate] = useState(order?.order_date ?? today());
   const [deliveryDate, setDeliveryDate] = useState(order?.delivery_date ?? addDays(today(), 3));
@@ -86,6 +91,7 @@ function SalesOrderForm({
     try {
       const payload = {
         customerId: Number(customerId),
+        warehouseId: warehouseId ? Number(warehouseId) : null,
         orderDate,
         deliveryDate: deliveryDate || null,
         notes: notes || null,
@@ -117,6 +123,19 @@ function SalesOrderForm({
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Branch">
+          <select
+            className={inputCls}
+            value={warehouseId}
+            onChange={(e) => setWarehouseId(e.target.value)}
+          >
+            {warehouses.map((warehouse) => (
+              <option key={warehouse.id} value={warehouse.id}>
+                {warehouse.name}
               </option>
             ))}
           </select>
@@ -348,6 +367,7 @@ export default function SalesOrdersPage() {
   const { can } = useAuth();
   const [status, setStatus] = useState('all');
   const [query, setQuery] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
   const [editing, setEditing] = useState<{ order: SalesOrder; lines: OrderLine[] } | 'new' | null>(
     null,
   );
@@ -359,10 +379,11 @@ export default function SalesOrdersPage() {
   const params = new URLSearchParams();
   if (status !== 'all') params.set('status', status);
   if (query) params.set('q', query);
+  if (warehouseId) params.set('warehouseId', warehouseId);
 
   const orders = useFetch<{ salesOrders: SalesOrder[]; total: number }>(
     `/sales-orders?${params.toString()}`,
-    [status, query],
+    [status, query, warehouseId],
   );
   const customers = useFetch<{ partners: Partner[] }>('/partners?type=customer&limit=500');
   const products = useFetch<{ products: Product[] }>('/products?limit=1000');
@@ -456,6 +477,18 @@ export default function SalesOrdersPage() {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
+        <select
+          className={`${inputCls} w-auto`}
+          value={warehouseId}
+          onChange={(event) => setWarehouseId(event.target.value)}
+        >
+          <option value="">All branches</option>
+          {(warehouses.data?.warehouses ?? []).map((warehouse) => (
+            <option key={warehouse.id} value={warehouse.id}>
+              {warehouse.name}
+            </option>
+          ))}
+        </select>
         <span className="text-sm text-slate-500">{orders.data?.total ?? 0} order(s)</span>
       </div>
 
@@ -477,6 +510,7 @@ export default function SalesOrdersPage() {
               <tr>
                 <th className={thCls}>Number</th>
                 <th className={thCls}>Customer</th>
+                <th className={thCls}>Branch</th>
                 <th className={thCls}>Ordered</th>
                 <th className={thCls}>Delivery</th>
                 <th className={thCls}>Status</th>
@@ -486,7 +520,7 @@ export default function SalesOrdersPage() {
             </thead>
             <tbody>
               {!orders.data || orders.data.salesOrders.length === 0 ? (
-                <EmptyState colSpan={7} message="No sales orders found." />
+                <EmptyState colSpan={8} message="No sales orders found." />
               ) : (
                 orders.data.salesOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50">
@@ -497,6 +531,7 @@ export default function SalesOrdersPage() {
                       <p className="font-semibold text-slate-800">{order.customer_name}</p>
                       <p className="text-xs text-slate-400">{order.line_count ?? 0} line(s)</p>
                     </td>
+                    <td className={tdCls}>{order.warehouse_name ?? '—'}</td>
                     <td className={tdCls}>{shortDate(order.order_date)}</td>
                     <td className={tdCls}>{shortDate(order.delivery_date)}</td>
                     <td className={tdCls}>
@@ -607,6 +642,7 @@ export default function SalesOrdersPage() {
             initialLines={editing === 'new' ? [] : editing.lines}
             customers={customers.data?.partners ?? []}
             products={products.data?.products ?? []}
+            warehouses={warehouses.data?.warehouses ?? []}
             onSaved={orders.reload}
             onClose={() => setEditing(null)}
           />

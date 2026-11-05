@@ -51,6 +51,10 @@ export interface Product {
   barcode: string | null;
   name: string;
   description: string | null;
+  brand: string | null;
+  colour: string | null;
+  size: string | null;
+  thickness: string | null;
   category_id: number | null;
   category_name: string | null;
   type: 'goods' | 'service';
@@ -132,6 +136,8 @@ export interface PurchaseOrder {
   number: string;
   supplier_id: number;
   supplier_name: string;
+  warehouse_id: number | null;
+  warehouse_name: string | null;
   status: 'draft' | 'confirmed' | 'received' | 'cancelled';
   order_date: string;
   expected_date: string | null;
@@ -158,6 +164,8 @@ export interface SalesOrder {
   number: string;
   customer_id: number;
   customer_name: string;
+  warehouse_id: number | null;
+  warehouse_name: string | null;
   status: 'draft' | 'confirmed' | 'fulfilled' | 'invoiced' | 'cancelled';
   order_date: string;
   delivery_date: string | null;
@@ -195,6 +203,8 @@ export interface Invoice {
   direction: 'sale' | 'purchase';
   partner_id: number;
   partner_name: string;
+  warehouse_id: number | null;
+  warehouse_name: string | null;
   status: 'draft' | 'open' | 'paid' | 'void';
   issue_date: string;
   due_date: string;
@@ -932,4 +942,53 @@ export interface MyLeaveResponse {
   leaveTypes: LeaveType[];
   requests: LeaveRequest[];
   balances: MyLeaveBalance[];
+}
+
+export interface WorkshopOperation {
+  id: number;
+  job_id: number;
+  name: string;
+  sequence: number;
+  status: 'pending' | 'in_progress' | 'done';
+  assigned_to: number | null;
+  assignee_name: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  notes: string | null;
+}
+
+export interface WorkshopFile {
+  id: number;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export interface WorkshopJob {
+  id: number;
+  number: string;
+  customer_id: number | null;
+  customer_name: string | null;
+  sales_order_id: number | null;
+  invoice_id: number | null;
+  invoice_number: string | null;
+  invoice_status: string | null;
+  title: string;
+  status: 'awaiting_payment' | 'queued' | 'in_progress' | 'ready' | 'collected' | 'cancelled';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  due_date: string | null;
+  assigned_to: number | null;
+  assignee_name: string | null;
+  payment_required: number;
+  quoted_cents: number;
+  material_cost_cents: number;
+  labour_cost_cents: number;
+  expense_cost_cents: number;
+  cutting_list_notes: string | null;
+  notes: string | null;
+  operation_count?: number;
+  done_operation_count?: number;
+  operations?: WorkshopOperation[];
+  files?: WorkshopFile[];
 }

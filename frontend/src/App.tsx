@@ -30,6 +30,7 @@ const BlogListPage = lazy(() => import('./pages/BlogListPage'));
 const BlogPostPage = lazy(() => import('./pages/BlogPostPage'));
 const PublicSitePage = lazy(() => import('./pages/PublicSitePage'));
 const MyLeavePage = lazy(() => import('./pages/MyLeavePage'));
+const WorkshopPage = lazy(() => import('./pages/WorkshopPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const PluginsPage = lazy(() => import('./pages/PluginsPage'));
@@ -54,6 +55,18 @@ function Guard({
   if (!can(permission)) return <Navigate to={fallback} replace />;
   if (module && !isEnabled(module)) return <Navigate to={fallback} replace />;
   return <>{children}</>;
+}
+
+function HomeRoute() {
+  const { can } = useAuth();
+  if (can('dashboard.view')) {
+    return (
+      <Page>
+        <DashboardPage />
+      </Page>
+    );
+  }
+  return <Navigate to={can('workshop.view') ? '/workshop' : '/my-leave'} replace />;
 }
 
 function isPublicPath(pathname: string): boolean {
@@ -134,16 +147,7 @@ export default function App() {
     <ModulesProvider>
       <Routes>
         <Route element={<Layout />}>
-          <Route
-            index
-            element={
-              <Guard permission="dashboard.view" fallback="/my-leave">
-                <Page>
-                  <DashboardPage />
-                </Page>
-              </Guard>
-            }
-          />
+          <Route index element={<HomeRoute />} />
           <Route
             path="/my-leave"
             element={
@@ -310,6 +314,16 @@ export default function App() {
               <Guard permission="recruitment.view" module="recruitment">
                 <Page>
                   <RecruitmentPage />
+                </Page>
+              </Guard>
+            }
+          />
+          <Route
+            path="/workshop"
+            element={
+              <Guard permission="workshop.view" module="workshop">
+                <Page>
+                  <WorkshopPage />
                 </Page>
               </Guard>
             }

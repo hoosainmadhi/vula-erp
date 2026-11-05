@@ -140,6 +140,10 @@ CREATE TABLE products (
   barcode TEXT UNIQUE,
   name TEXT NOT NULL,
   description TEXT,
+  brand TEXT,
+  colour TEXT,
+  size TEXT,
+  thickness TEXT,
   category_id INTEGER REFERENCES product_categories(id) ON DELETE SET NULL,
   type TEXT NOT NULL DEFAULT 'goods' CHECK (type IN ('goods', 'service')),
   uom TEXT NOT NULL DEFAULT 'unit',
@@ -206,6 +210,7 @@ CREATE TABLE purchase_orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   number TEXT NOT NULL UNIQUE,
   supplier_id INTEGER NOT NULL REFERENCES partners(id) ON DELETE RESTRICT,
+  warehouse_id INTEGER REFERENCES warehouses(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'confirmed', 'received', 'cancelled')),
   order_date TEXT NOT NULL,
   expected_date TEXT,
@@ -260,6 +265,7 @@ CREATE TABLE sales_orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   number TEXT NOT NULL UNIQUE,
   customer_id INTEGER NOT NULL REFERENCES partners(id) ON DELETE RESTRICT,
+  warehouse_id INTEGER REFERENCES warehouses(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'confirmed', 'fulfilled', 'invoiced', 'cancelled')),
   order_date TEXT NOT NULL,
   delivery_date TEXT,
@@ -297,6 +303,7 @@ CREATE TABLE invoices (
   partner_id INTEGER NOT NULL REFERENCES partners(id) ON DELETE RESTRICT,
   sales_order_id INTEGER REFERENCES sales_orders(id) ON DELETE SET NULL,
   purchase_order_id INTEGER REFERENCES purchase_orders(id) ON DELETE SET NULL,
+  warehouse_id INTEGER REFERENCES warehouses(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'open', 'paid', 'void')),
   issue_date TEXT NOT NULL,
   due_date TEXT NOT NULL,
@@ -877,3 +884,57 @@ CREATE TABLE website_menu_items (
   parent_id INTEGER REFERENCES website_menu_items(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Workshop: cutting/edging job cards, operations and cutting-list files
+CREATE TABLE workshop_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  number TEXT NOT NULL UNIQUE,
+  customer_id INTEGER REFERENCES partners(id) ON DELETE SET NULL,
+  sales_order_id INTEGER REFERENCES sales_orders(id) ON DELETE SET NULL,
+  invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'awaiting_payment' CHECK (status IN ('awaiting_payment', 'queued', 'in_progress', 'ready', 'collected', 'cancelled')),
+  priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+  due_date TEXT,
+  assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  payment_required INTEGER NOT NULL DEFAULT 1 CHECK (payment_required IN (0, 1)),
+  quoted_cents INTEGER NOT NULL DEFAULT 0 CHECK (quoted_cents >= 0),
+  material_cost_cents INTEGER NOT NULL DEFAULT 0 CHECK (material_cost_cents >= 0),
+  labour_cost_cents INTEGER NOT NULL DEFAULT 0 CHECK (labour_cost_cents >= 0),
+  expense_cost_cents INTEGER NOT NULL DEFAULT 0 CHECK (expense_cost_cents >= 0),
+  cutting_list_notes TEXT,
+  notes TEXT,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX ix_workshop_jobs_status ON workshop_jobs(status);
+CREATE INDEX ix_workshop_jobs_customer ON workshop_jobs(customer_id);
+
+CREATE TABLE workshop_job_operations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id INTEGER NOT NULL REFERENCES workshop_jobs(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  sequence INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'done')),
+  assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  notes TEXT
+);
+
+CREATE INDEX ix_workshop_operations_job ON workshop_job_operations(job_id);
+
+CREATE TABLE workshop_job_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id INTEGER NOT NULL REFERENCES workshop_jobs(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  content BLOB NOT NULL,
+  uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX ix_workshop_files_job ON workshop_job_files(job_id);

@@ -21,6 +21,7 @@ export interface CreateInvoiceInput {
   notes?: string | null;
   salesOrderId?: number | null;
   purchaseOrderId?: number | null;
+  warehouseId?: number | null;
   lines: InvoiceLineInput[];
   post?: boolean;
   userId?: number | null;
@@ -54,15 +55,28 @@ export function createInvoice(input: CreateInvoiceInput) {
   const total = subtotal + tax;
   const shouldPost = input.post !== false;
   const status = shouldPost ? 'open' : 'draft';
+  let warehouseId = input.warehouseId ?? null;
+  if (warehouseId === null && input.salesOrderId) {
+    const order = db
+      .prepare('SELECT warehouse_id FROM sales_orders WHERE id = ?')
+      .get(input.salesOrderId) as { warehouse_id: number | null } | undefined;
+    warehouseId = order?.warehouse_id ?? null;
+  }
+  if (warehouseId === null && input.purchaseOrderId) {
+    const order = db
+      .prepare('SELECT warehouse_id FROM purchase_orders WHERE id = ?')
+      .get(input.purchaseOrderId) as { warehouse_id: number | null } | undefined;
+    warehouseId = order?.warehouse_id ?? null;
+  }
 
   const invoiceId = db.transaction(() => {
     const number = nextNumber(input.direction === 'sale' ? 'sales_invoice' : 'purchase_bill');
     const result = db
       .prepare(
         `INSERT INTO invoices
-           (number, direction, partner_id, sales_order_id, purchase_order_id, status, issue_date, due_date,
-            subtotal_cents, tax_cents, total_cents, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (number, direction, partner_id, sales_order_id, purchase_order_id, warehouse_id, status,
+            issue_date, due_date, subtotal_cents, tax_cents, total_cents, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         number,
@@ -70,6 +84,7 @@ export function createInvoice(input: CreateInvoiceInput) {
         input.partnerId,
         input.salesOrderId ?? null,
         input.purchaseOrderId ?? null,
+        warehouseId,
         status,
         input.issueDate,
         input.dueDate,
@@ -128,8 +143,12 @@ export function getInvoice(id: number) {
   const invoice = db
     .prepare(
       `SELECT i.*, p.name AS partner_name, p.vat_number AS partner_vat_number,
-              p.email AS partner_email, p.address_line1 AS partner_address
-       FROM invoices i JOIN partners p ON p.id = i.partner_id WHERE i.id = ?`,
+              p.email AS partner_email, p.address_line1 AS partner_address,
+              w.name AS warehouse_name
+       FROM invoices i
+       JOIN partners p ON p.id = i.partner_id
+       LEFT JOIN warehouses w ON w.id = i.warehouse_id
+       WHERE i.id = ?`,
     )
     .get(id) as Record<string, unknown> | undefined;
   if (!invoice) throw notFound('Invoice not found');

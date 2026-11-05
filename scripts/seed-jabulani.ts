@@ -695,18 +695,24 @@ function createPurchaseOrder(input: {
   const subtotal = lines.reduce((total, line) => total + line.totals.subtotalCents, 0);
   const tax = lines.reduce((total, line) => total + line.totals.taxCents, 0);
   const total = subtotal + tax;
+  const warehouseId = (
+    db.prepare('SELECT warehouse_id FROM stock_locations WHERE id = ?').get(input.locationId) as {
+      warehouse_id: number;
+    }
+  ).warehouse_id;
   const poId = db.transaction(() => {
     const number = nextNumber('purchase_order');
     const result = db
       .prepare(
         `INSERT INTO purchase_orders
-           (number, supplier_id, status, order_date, expected_date, subtotal_cents, tax_cents,
-            total_cents, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (number, supplier_id, warehouse_id, status, order_date, expected_date, subtotal_cents,
+            tax_cents, total_cents, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         number,
         input.supplierId,
+        warehouseId,
         input.status === 'draft' ? 'draft' : 'confirmed',
         input.orderDate,
         input.expectedDate,
@@ -793,18 +799,24 @@ function createSalesOrder(input: {
   const subtotal = lines.reduce((total, line) => total + line.totals.subtotalCents, 0);
   const tax = lines.reduce((total, line) => total + line.totals.taxCents, 0);
   const total = subtotal + tax;
+  const warehouseId = (
+    db.prepare('SELECT warehouse_id FROM stock_locations WHERE id = ?').get(input.locationId) as {
+      warehouse_id: number;
+    }
+  ).warehouse_id;
   const soId = db.transaction(() => {
     const number = nextNumber('sales_order');
     const result = db
       .prepare(
         `INSERT INTO sales_orders
-           (number, customer_id, status, order_date, delivery_date, subtotal_cents, tax_cents,
-            total_cents, notes, created_by)
-         VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
+           (number, customer_id, warehouse_id, status, order_date, delivery_date, subtotal_cents,
+            tax_cents, total_cents, notes, created_by)
+         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         number,
         input.customerId,
+        warehouseId,
         input.orderDate,
         input.orderDate,
         subtotal,

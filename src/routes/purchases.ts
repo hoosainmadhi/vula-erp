@@ -88,6 +88,13 @@ function resolveLines(raw: unknown): ResolvedLine[] {
   });
 }
 
+function defaultWarehouseId(): number | null {
+  const row = getDb()
+    .prepare('SELECT id FROM warehouses WHERE is_active = 1 ORDER BY id LIMIT 1')
+    .get() as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
 function saveLines(purchaseOrderId: number, lines: ResolvedLine[]): void {
   const db = getDb();
   db.prepare('DELETE FROM purchase_order_lines WHERE purchase_order_id = ?').run(purchaseOrderId);
@@ -128,6 +135,10 @@ purchasesRouter.get(
       where.push('po.supplier_id = ?');
       params.push(Number(req.query.supplierId));
     }
+    if (req.query.warehouseId) {
+      where.push('po.warehouse_id = ?');
+      params.push(Number(req.query.warehouseId));
+    }
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (q) {
       where.push('(po.number LIKE ? OR p.name LIKE ?)');
@@ -155,9 +166,11 @@ purchasesRouter.get(
     ).count;
     const purchaseOrders = db
       .prepare(
-        `SELECT po.*, p.name AS supplier_name,
+        `SELECT po.*, p.name AS supplier_name, w.name AS warehouse_name,
                 (SELECT COUNT(*) FROM purchase_order_lines l WHERE l.purchase_order_id = po.id) AS line_count
-         FROM purchase_orders po JOIN partners p ON p.id = po.supplier_id
+         FROM purchase_orders po
+         JOIN partners p ON p.id = po.supplier_id
+         LEFT JOIN warehouses w ON w.id = po.warehouse_id
          ${whereSql} ORDER BY po.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset);
@@ -194,8 +207,12 @@ purchasesRouter.get(
     const db = getDb();
     const order = db
       .prepare(
-        `SELECT po.*, p.name AS supplier_name, p.email AS supplier_email, p.vat_number AS supplier_vat_number
-         FROM purchase_orders po JOIN partners p ON p.id = po.supplier_id WHERE po.id = ?`,
+        `SELECT po.*, p.name AS supplier_name, p.email AS supplier_email,
+                p.vat_number AS supplier_vat_number, w.name AS warehouse_name
+         FROM purchase_orders po
+         JOIN partners p ON p.id = po.supplier_id
+         LEFT JOIN warehouses w ON w.id = po.warehouse_id
+         WHERE po.id = ?`,
       )
       .get(id);
     if (!order) throw notFound('Purchase order not found');
@@ -229,12 +246,14 @@ purchasesRouter.post(
       const result = getDb()
         .prepare(
           `INSERT INTO purchase_orders
-             (number, supplier_id, status, order_date, expected_date, subtotal_cents, tax_cents, total_cents, notes, created_by)
-           VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
+             (number, supplier_id, warehouse_id, status, order_date, expected_date, subtotal_cents,
+              tax_cents, total_cents, notes, created_by)
+           VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           number,
           supplierId,
+          optionalInt(req.body?.warehouseId, 'Branch', 1) ?? defaultWarehouseId(),
           requireDate(req.body?.orderDate, 'Order date'),
           optionalDate(req.body?.expectedDate, 'Expected date'),
           subtotal,
@@ -292,10 +311,14 @@ purchasesRouter.put(
 
     db.transaction(() => {
       db.prepare(
-        `UPDATE purchase_orders SET supplier_id = ?, order_date = ?, expected_date = ?, subtotal_cents = ?,
-           tax_cents = ?, total_cents = ?, notes = ?, updated_at = datetime('now') WHERE id = ?`,
+        `UPDATE purchase_orders SET supplier_id = ?, warehouse_id = ?, order_date = ?,
+           expected_date = ?, subtotal_cents = ?, tax_cents = ?, total_cents = ?, notes = ?,
+           updated_at = datetime('now') WHERE id = ?`,
       ).run(
         supplierId,
+        req.body?.warehouseId === undefined
+          ? (existing.warehouse_id as number | null)
+          : optionalInt(req.body.warehouseId, 'Branch', 1),
         req.body?.orderDate === undefined
           ? existing.order_date
           : requireDate(req.body.orderDate, 'Order date'),

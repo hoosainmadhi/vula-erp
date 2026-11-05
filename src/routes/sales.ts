@@ -122,6 +122,13 @@ interface SalesOrderLine {
   tax_rate_bp: number;
 }
 
+function defaultWarehouseId(): number | null {
+  const row = getDb()
+    .prepare('SELECT id FROM warehouses WHERE is_active = 1 ORDER BY id LIMIT 1')
+    .get() as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
 interface SalesOrderDetail extends Record<string, unknown> {
   status: string;
   customer_id: number;
@@ -134,9 +141,13 @@ function getSalesOrder(id: number): SalesOrderDetail {
   const db = getDb();
   const order = db
     .prepare(
-      `SELECT so.*, p.name AS customer_name, p.email AS customer_email, p.vat_number AS customer_vat_number,
-              p.payment_terms_days
-       FROM sales_orders so JOIN partners p ON p.id = so.customer_id WHERE so.id = ?`,
+      `SELECT so.*, p.name AS customer_name, p.email AS customer_email,
+              p.vat_number AS customer_vat_number, p.payment_terms_days,
+              w.name AS warehouse_name
+       FROM sales_orders so
+       JOIN partners p ON p.id = so.customer_id
+       LEFT JOIN warehouses w ON w.id = so.warehouse_id
+       WHERE so.id = ?`,
     )
     .get(id) as Record<string, unknown> | undefined;
   if (!order) throw notFound('Sales order not found');
@@ -166,6 +177,10 @@ salesRouter.get(
       where.push('so.customer_id = ?');
       params.push(Number(req.query.customerId));
     }
+    if (req.query.warehouseId) {
+      where.push('so.warehouse_id = ?');
+      params.push(Number(req.query.warehouseId));
+    }
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (q) {
       where.push('(so.number LIKE ? OR p.name LIKE ?)');
@@ -193,9 +208,11 @@ salesRouter.get(
     ).count;
     const salesOrders = db
       .prepare(
-        `SELECT so.*, p.name AS customer_name,
+        `SELECT so.*, p.name AS customer_name, w.name AS warehouse_name,
                 (SELECT COUNT(*) FROM sales_order_lines l WHERE l.sales_order_id = so.id) AS line_count
-         FROM sales_orders so JOIN partners p ON p.id = so.customer_id
+         FROM sales_orders so
+         JOIN partners p ON p.id = so.customer_id
+         LEFT JOIN warehouses w ON w.id = so.warehouse_id
          ${whereSql} ORDER BY so.id DESC LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset);
@@ -232,12 +249,14 @@ salesRouter.post(
       const result = getDb()
         .prepare(
           `INSERT INTO sales_orders
-             (number, customer_id, status, order_date, delivery_date, subtotal_cents, tax_cents, total_cents, notes, created_by)
-           VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
+             (number, customer_id, warehouse_id, status, order_date, delivery_date, subtotal_cents,
+              tax_cents, total_cents, notes, created_by)
+           VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           number,
           customerId,
+          optionalInt(req.body?.warehouseId, 'Branch', 1) ?? defaultWarehouseId(),
           requireDate(req.body?.orderDate, 'Order date'),
           optionalDate(req.body?.deliveryDate, 'Delivery date'),
           subtotal,
@@ -281,10 +300,14 @@ salesRouter.put(
 
     db.transaction(() => {
       db.prepare(
-        `UPDATE sales_orders SET customer_id = ?, order_date = ?, delivery_date = ?, subtotal_cents = ?,
-           tax_cents = ?, total_cents = ?, notes = ?, updated_at = datetime('now') WHERE id = ?`,
+        `UPDATE sales_orders SET customer_id = ?, warehouse_id = ?, order_date = ?, delivery_date = ?,
+           subtotal_cents = ?, tax_cents = ?, total_cents = ?, notes = ?,
+           updated_at = datetime('now') WHERE id = ?`,
       ).run(
         customerId,
+        req.body?.warehouseId === undefined
+          ? (existing.warehouse_id as number | null)
+          : optionalInt(req.body.warehouseId, 'Branch', 1),
         req.body?.orderDate === undefined
           ? existing.order_date
           : requireDate(req.body.orderDate, 'Order date'),

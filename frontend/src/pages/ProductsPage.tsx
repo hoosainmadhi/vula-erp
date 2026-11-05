@@ -40,6 +40,10 @@ function ProductForm({
     barcode: product?.barcode ?? '',
     name: product?.name ?? '',
     description: product?.description ?? '',
+    brand: product?.brand ?? '',
+    colour: product?.colour ?? '',
+    size: product?.size ?? '',
+    thickness: product?.thickness ?? '',
     categoryId: product?.category_id ? String(product.category_id) : '',
     type: product?.type ?? 'goods',
     uom: product?.uom ?? 'unit',
@@ -108,6 +112,40 @@ function ProductForm({
           required
         />
       </Field>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Field label="Brand">
+          <input
+            className={inputCls}
+            value={form.brand}
+            onChange={(e) => set('brand', e.target.value)}
+            placeholder="PG Bison"
+          />
+        </Field>
+        <Field label="Colour">
+          <input
+            className={inputCls}
+            value={form.colour}
+            onChange={(e) => set('colour', e.target.value)}
+            placeholder="White"
+          />
+        </Field>
+        <Field label="Size">
+          <input
+            className={inputCls}
+            value={form.size}
+            onChange={(e) => set('size', e.target.value)}
+            placeholder="2750x1830"
+          />
+        </Field>
+        <Field label="Thickness">
+          <input
+            className={inputCls}
+            value={form.thickness}
+            onChange={(e) => set('thickness', e.target.value)}
+            placeholder="16mm"
+          />
+        </Field>
+      </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Type">
           <select
@@ -395,7 +433,7 @@ export default function ProductsPage() {
             <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-slate-400" />
             <input
               className={`${inputCls} pl-9`}
-              placeholder="Search name, SKU, barcode…"
+              placeholder="Search name, SKU, barcode, brand, colour…"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -436,7 +474,13 @@ export default function ProductsPage() {
                       <td className={`${tdCls} font-mono text-xs text-slate-500`}>{product.sku}</td>
                       <td className={tdCls}>
                         <p className="font-semibold text-slate-800">{product.name}</p>
-                        <p className="text-xs text-slate-400">{product.barcode ?? product.uom}</p>
+                        <p className="text-xs text-slate-400">
+                          {[product.brand, product.colour, product.size, product.thickness]
+                            .filter(Boolean)
+                            .join(' · ') ||
+                            product.barcode ||
+                            product.uom}
+                        </p>
                       </td>
                       <td className={tdCls}>{product.category_name ?? '—'}</td>
                       <td className={tdCls}>{titleCase(product.type)}</td>

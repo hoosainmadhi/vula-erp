@@ -23,6 +23,7 @@ import { manufacturingRouter } from './manufacturing.js';
 import { posRouter } from './pos.js';
 import { blogsRouter, publicBlogsRouter } from './blogs.js';
 import { websiteRouter, publicWebsiteRouter } from './website.js';
+import { workshopRouter } from './workshop.js';
 
 export const apiRouter = Router();
 
@@ -52,6 +53,7 @@ apiRouter.use('/maintenance', requireModule('maintenance'), maintenanceRouter);
 apiRouter.use('/recruitment', requireModule('recruitment'), recruitmentRouter);
 apiRouter.use('/manufacturing', requireModule('manufacturing'), manufacturingRouter);
 apiRouter.use('/pos', requireModule('pos'), posRouter);
+apiRouter.use('/workshop', requireModule('workshop'), workshopRouter);
 apiRouter.use('/blogs', requireModule('blogs'), blogsRouter);
 apiRouter.use('/website', requireModule('website'), websiteRouter);
 apiRouter.use('/public/blogs', requireModule('blogs'), publicBlogsRouter);

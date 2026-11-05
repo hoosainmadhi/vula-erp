@@ -33,8 +33,18 @@ productsRouter.get(
 
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (q) {
-      where.push('(p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)');
-      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+      where.push(
+        '(p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ? OR p.brand LIKE ? OR p.colour LIKE ? OR p.size LIKE ?)',
+      );
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    }
+    if (typeof req.query.brand === 'string' && req.query.brand.trim()) {
+      where.push('p.brand = ?');
+      params.push(req.query.brand.trim());
+    }
+    if (typeof req.query.colour === 'string' && req.query.colour.trim()) {
+      where.push('p.colour = ?');
+      params.push(req.query.colour.trim());
     }
     if (req.query.categoryId) {
       where.push('p.category_id = ?');
@@ -106,15 +116,20 @@ productsRouter.post(
       const result = db
         .prepare(
           `INSERT INTO products
-             (sku, barcode, name, description, category_id, type, uom, sale_price_cents, cost_cents,
-              tax_rate_id, track_inventory, reorder_level, is_active)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (sku, barcode, name, description, brand, colour, size, thickness, category_id, type,
+              uom, sale_price_cents, cost_cents, tax_rate_id, track_inventory, reorder_level,
+              is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           sku,
           optionalString(req.body?.barcode, 'Barcode', 60),
           name,
           optionalString(req.body?.description, 'Description', 5000),
+          optionalString(req.body?.brand, 'Brand', 100),
+          optionalString(req.body?.colour, 'Colour', 100),
+          optionalString(req.body?.size, 'Size', 100),
+          optionalString(req.body?.thickness, 'Thickness', 100),
           categoryId,
           type,
           optionalString(req.body?.uom, 'Unit of measure', 30) ?? 'unit',
@@ -160,9 +175,10 @@ productsRouter.put(
     try {
       db.prepare(
         `UPDATE products SET
-           sku = ?, barcode = ?, name = ?, description = ?, category_id = ?, type = ?, uom = ?,
-           sale_price_cents = ?, cost_cents = ?, tax_rate_id = ?, track_inventory = ?,
-           reorder_level = ?, is_active = ?, updated_at = datetime('now')
+           sku = ?, barcode = ?, name = ?, description = ?, brand = ?, colour = ?, size = ?,
+           thickness = ?, category_id = ?, type = ?, uom = ?, sale_price_cents = ?, cost_cents = ?,
+           tax_rate_id = ?, track_inventory = ?, reorder_level = ?, is_active = ?,
+           updated_at = datetime('now')
          WHERE id = ?`,
       ).run(
         req.body?.sku === undefined ? existing.sku : requireString(req.body.sku, 'SKU', 60),
@@ -173,6 +189,18 @@ productsRouter.put(
         req.body?.description === undefined
           ? (existing.description as string | null)
           : optionalString(req.body.description, 'Description', 5000),
+        req.body?.brand === undefined
+          ? (existing.brand as string | null)
+          : optionalString(req.body.brand, 'Brand', 100),
+        req.body?.colour === undefined
+          ? (existing.colour as string | null)
+          : optionalString(req.body.colour, 'Colour', 100),
+        req.body?.size === undefined
+          ? (existing.size as string | null)
+          : optionalString(req.body.size, 'Size', 100),
+        req.body?.thickness === undefined
+          ? (existing.thickness as string | null)
+          : optionalString(req.body.thickness, 'Thickness', 100),
         categoryId,
         req.body?.type === undefined
           ? existing.type

@@ -19,9 +19,12 @@ export default function LoginPage() {
     setError(null);
     try {
       const loggedIn = await login(email, password);
-      navigate(loggedIn.permissions.includes('dashboard.view') ? '/' : '/my-leave', {
-        replace: true,
-      });
+      const landing = loggedIn.permissions.includes('dashboard.view')
+        ? '/'
+        : loggedIn.permissions.includes('workshop.view')
+          ? '/workshop'
+          : '/my-leave';
+      navigate(landing, { replace: true });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
