@@ -15,6 +15,7 @@ import {
   inputCls,
   Modal,
   PageHeader,
+  PasswordInput,
   Spinner,
   tdCls,
   thCls,
@@ -128,9 +129,7 @@ function UserForm({
         label={user ? 'New password (optional)' : 'Password'}
         hint={user ? 'Leave blank to keep the current password.' : 'At least 8 characters.'}
       >
-        <input
-          className={inputCls}
-          type="password"
+        <PasswordInput
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required={!user}

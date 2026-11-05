@@ -909,3 +909,27 @@ export interface PublicSite {
   menu: WebsiteMenuItem[];
   pages: { id: number; title: string; slug: string; published_at: string | null }[];
 }
+
+export interface MyLeaveBalance {
+  leave_type_id: number;
+  leave_type_name: string;
+  days_per_year: number;
+  approved_days: number;
+  pending_days: number;
+}
+
+export interface MyLeaveResponse {
+  year: number;
+  employee: {
+    id: number;
+    employee_number: string;
+    first_name: string;
+    last_name: string;
+    email: string | null;
+    job_title: string | null;
+    status: string;
+  };
+  leaveTypes: LeaveType[];
+  requests: LeaveRequest[];
+  balances: MyLeaveBalance[];
+}

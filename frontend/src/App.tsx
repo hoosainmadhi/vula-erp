@@ -29,6 +29,7 @@ const WebsitePage = lazy(() => import('./pages/WebsitePage'));
 const BlogListPage = lazy(() => import('./pages/BlogListPage'));
 const BlogPostPage = lazy(() => import('./pages/BlogPostPage'));
 const PublicSitePage = lazy(() => import('./pages/PublicSitePage'));
+const MyLeavePage = lazy(() => import('./pages/MyLeavePage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const PluginsPage = lazy(() => import('./pages/PluginsPage'));
@@ -40,16 +41,18 @@ function Page({ children }: { children: ReactNode }) {
 function Guard({
   permission,
   module,
+  fallback = '/',
   children,
 }: {
   permission: string;
   module?: string;
+  fallback?: string;
   children: ReactNode;
 }) {
   const { can } = useAuth();
   const { isEnabled } = useModules();
-  if (!can(permission)) return <Navigate to="/" replace />;
-  if (module && !isEnabled(module)) return <Navigate to="/" replace />;
+  if (!can(permission)) return <Navigate to={fallback} replace />;
+  if (module && !isEnabled(module)) return <Navigate to={fallback} replace />;
   return <>{children}</>;
 }
 
@@ -134,9 +137,21 @@ export default function App() {
           <Route
             index
             element={
-              <Page>
-                <DashboardPage />
-              </Page>
+              <Guard permission="dashboard.view" fallback="/my-leave">
+                <Page>
+                  <DashboardPage />
+                </Page>
+              </Guard>
+            }
+          />
+          <Route
+            path="/my-leave"
+            element={
+              <Guard permission="leave.self" module="time-off">
+                <Page>
+                  <MyLeavePage />
+                </Page>
+              </Guard>
             }
           />
           <Route

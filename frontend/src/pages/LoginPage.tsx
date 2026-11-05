@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LockKeyhole, Mail } from 'lucide-react';
 import { useAuth } from '../auth';
 import { errorMessage } from '../api';
-import { btnPrimary, ErrorBox, inputCls } from '../components/ui';
+import { btnPrimary, ErrorBox, inputCls, PasswordInput } from '../components/ui';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -18,8 +18,10 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await login(email, password);
-      navigate('/', { replace: true });
+      const loggedIn = await login(email, password);
+      navigate(loggedIn.permissions.includes('dashboard.view') ? '/' : '/my-leave', {
+        replace: true,
+      });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -65,28 +67,18 @@ export default function LoginPage() {
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
               Password
             </span>
-            <div className="relative">
-              <LockKeyhole className="pointer-events-none absolute left-3 top-2.5 size-4 text-slate-400" />
-              <input
-                className={`${inputCls} pl-9`}
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </div>
+            <PasswordInput
+              leftIcon={<LockKeyhole className="size-4 text-slate-400" />}
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
           </label>
           <button type="submit" className={`${btnPrimary} w-full`} disabled={busy}>
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-
-        <p className="mt-5 rounded-lg bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
-          First run? Seed the database with <code className="font-semibold">npm run seed:demo</code>
-          <br />
-          Default: admin@vula-erp.local / ChangeMe123!
-        </p>
       </div>
     </div>
   );

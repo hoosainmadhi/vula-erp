@@ -1160,6 +1160,11 @@ export const PERMISSIONS: readonly { key: string; module: string; description: s
   { key: 'accounting.manage', module: 'accounting', description: 'Post journal entries' },
   { key: 'hr.view', module: 'hr', description: 'View employees and leave' },
   { key: 'hr.manage', module: 'hr', description: 'Manage employees and leave' },
+  {
+    key: 'leave.self',
+    module: 'time-off',
+    description: 'View and apply for your own leave',
+  },
   { key: 'projects.view', module: 'projects', description: 'View projects and tasks' },
   { key: 'projects.manage', module: 'projects', description: 'Manage projects and tasks' },
   {
@@ -1250,6 +1255,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'recruitment.manage',
     'maintenance.view',
   ],
+  employee: ['leave.self'],
   viewer: [
     'dashboard.view',
     'partners.view',
@@ -1322,6 +1328,7 @@ export function ensureReferenceData(instance: Db): void {
     sales: 'Customers, sales orders and invoices',
     warehouse: 'Products, stock and purchasing',
     hr: 'Employees and leave',
+    employee: 'Self-service access for employees',
     viewer: 'Read-only access',
   };
   for (const [role, description] of Object.entries(roleDescriptions))

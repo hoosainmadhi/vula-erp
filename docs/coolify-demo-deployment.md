@@ -5,9 +5,9 @@ public repo `https://github.com/hoosainmadhi/vula-erp`.
 
 ## URLs
 
-| Customer | URL |
-| --- | --- |
-| Africoach | https://africoach-erp.vula-app.co.za |
+| Customer        | URL                                        |
+| --------------- | ------------------------------------------ |
+| Africoach       | https://africoach-erp.vula-app.co.za       |
 | Jabulani Boards | https://jabulani-boards-erp.vula-app.co.za |
 
 Public pages: `/site` · Blog: `/blog`
@@ -16,33 +16,33 @@ Public pages: `/site` · Blog: `/blog`
 
 ### Africoach
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@africoach.local` | `AfricoachDemo2026!` |
-| Sales | `sales@africoach.local` | `AfricoachDemo2026!` |
+| Role      | Email                       | Password             |
+| --------- | --------------------------- | -------------------- |
+| Admin     | `admin@africoach.local`     | `AfricoachDemo2026!` |
+| Sales     | `sales@africoach.local`     | `AfricoachDemo2026!` |
 | Warehouse | `warehouse@africoach.local` | `AfricoachDemo2026!` |
-| Accounts | `accounts@africoach.local` | `AfricoachDemo2026!` |
+| Accounts  | `accounts@africoach.local`  | `AfricoachDemo2026!` |
 
 ### Jabulani Boards
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@jabulani.local` | `JabulaniDemo2026!` |
-| Sales | `sales@jabulani.local` | `JabulaniDemo2026!` |
+| Role     | Email                     | Password            |
+| -------- | ------------------------- | ------------------- |
+| Admin    | `admin@jabulani.local`    | `JabulaniDemo2026!` |
+| Sales    | `sales@jabulani.local`    | `JabulaniDemo2026!` |
 | Workshop | `workshop@jabulani.local` | `JabulaniDemo2026!` |
 | Accounts | `accounts@jabulani.local` | `JabulaniDemo2026!` |
 
 ## Coolify resources
 
-| Item | Value |
-| --- | --- |
-| Project | `ERP` (`myvufcyo8hsssb6w8dnr4xc8`) |
-| Africoach app | `vula-erp-africoach` (`3kbqq3f1zsd0ldzsj53drwdq`) |
-| Jabulani app | `vula-erp-jabulani` (`2r7w12cflfcfpnvaeaman5yd`) |
-| Build pack | Dockerfile (`/Dockerfile`) |
-| Internal port | `3000` |
-| Persistent volume | `/data` (named volume per app) |
-| Repo | `https://github.com/hoosainmadhi/vula-erp` |
+| Item              | Value                                             |
+| ----------------- | ------------------------------------------------- |
+| Project           | `ERP` (`myvufcyo8hsssb6w8dnr4xc8`)                |
+| Africoach app     | `vula-erp-africoach` (`3kbqq3f1zsd0ldzsj53drwdq`) |
+| Jabulani app      | `vula-erp-jabulani` (`2r7w12cflfcfpnvaeaman5yd`)  |
+| Build pack        | Dockerfile (`/Dockerfile`)                        |
+| Internal port     | `3000`                                            |
+| Persistent volume | `/data` (named volume per app)                    |
+| Repo              | `https://github.com/hoosainmadhi/vula-erp`        |
 
 The repo is public because Coolify's GitHub App did not have access to the new
 private repo. To make it private later, add the repo to the Coolify GitHub App

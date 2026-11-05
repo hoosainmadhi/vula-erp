@@ -7,16 +7,17 @@ Local demo of vula-erp prepared for Jabulani Boards.
 **http://jabulani-boards.localhost:3290**
 
 The host proxy on port 3290 routes:
+
 - `africcoach.localhost` → Africoach backend on 3291
 - `jabulani-boards.localhost` → Jabulani backend on 3292
 
 ## Sign in
 
-| User | Email | Password | Role |
-| --- | --- | --- | --- |
-| Admin | `admin@jabulani.local` | `JabulaniDemo2026!` | admin |
-| Sales | `sales@jabulani.local` | `JabulaniDemo2026!` | sales |
-| Workshop | `workshop@jabulani.local` | `JabulaniDemo2026!` | warehouse |
+| User     | Email                     | Password            | Role       |
+| -------- | ------------------------- | ------------------- | ---------- |
+| Admin    | `admin@jabulani.local`    | `JabulaniDemo2026!` | admin      |
+| Sales    | `sales@jabulani.local`    | `JabulaniDemo2026!` | sales      |
+| Workshop | `workshop@jabulani.local` | `JabulaniDemo2026!` | warehouse  |
 | Accounts | `accounts@jabulani.local` | `JabulaniDemo2026!` | accountant |
 
 ## What is seeded
@@ -39,10 +40,10 @@ The host proxy on port 3290 routes:
 
 One deployment, two branches:
 
-| Branch | Warehouse | Stock location | POS register |
-| --- | --- | --- | --- |
-| Johannesburg HQ | Johannesburg HQ | JHB Stock | Johannesburg Register |
-| Eastern Cape | Eastern Cape Branch | EC Stock | Eastern Cape Register |
+| Branch          | Warehouse           | Stock location | POS register          |
+| --------------- | ------------------- | -------------- | --------------------- |
+| Johannesburg HQ | Johannesburg HQ     | JHB Stock      | Johannesburg Register |
+| Eastern Cape    | Eastern Cape Branch | EC Stock       | Eastern Cape Register |
 
 ## Suggested demo flow
 
@@ -64,6 +65,7 @@ bash scripts/start-demos.sh
 ```
 
 This starts both demo backends and the host proxy. Logs:
+
 - `/tmp/opencode/africoach-demo.log`
 - `/tmp/opencode/jabulani-demo.log`
 - `/tmp/opencode/demo-proxy.log`

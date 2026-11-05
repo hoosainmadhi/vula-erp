@@ -119,6 +119,9 @@ usersRouter.post(
         .run(email, bcrypt.hashSync(password, 10), firstName, lastName);
       const userId = Number(result.lastInsertRowid);
       setRoles(userId, roles);
+      db.prepare(
+        'UPDATE employees SET user_id = ? WHERE lower(email) = lower(?) AND user_id IS NULL',
+      ).run(userId, email);
       recordAudit(req.user!.id, 'create', 'user', userId, { email, roles });
       return userId;
     })();
@@ -160,6 +163,9 @@ usersRouter.put(
         ).run(bcrypt.hashSync(req.body.password, 10), id);
       }
       if (Array.isArray(req.body?.roles)) setRoles(id, (req.body.roles as unknown[]).map(String));
+      db.prepare(
+        'UPDATE employees SET user_id = ? WHERE lower(email) = lower(?) AND user_id IS NULL',
+      ).run(id, current.email);
       recordAudit(req.user!.id, 'update', 'user', id, { roles: req.body?.roles });
     })();
 

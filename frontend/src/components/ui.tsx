@@ -1,5 +1,11 @@
-import { useEffect, type ReactNode } from 'react';
-import { AlertTriangle, Loader2, X } from 'lucide-react';
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react';
+import { AlertTriangle, Eye, EyeOff, Loader2, X } from 'lucide-react';
 import { statusColours, titleCase } from '../lib/format';
 
 export const inputCls =
@@ -16,6 +22,43 @@ export const btnDanger =
 
 export const btnGhost =
   'inline-flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100';
+
+export function PasswordInput({
+  value,
+  onChange,
+  className = '',
+  leftIcon,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & {
+  value: string;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  leftIcon?: ReactNode;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      {leftIcon ? (
+        <span className="pointer-events-none absolute left-3 top-2.5">{leftIcon}</span>
+      ) : null}
+      <input
+        {...props}
+        type={visible ? 'text' : 'password'}
+        value={value}
+        onChange={onChange}
+        className={`${inputCls} pr-11 ${leftIcon ? 'pl-9' : ''} ${className}`}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((current) => !current)}
+        className="absolute right-1.5 top-1.5 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+        aria-label={visible ? 'Hide password' : 'Show password'}
+        title={visible ? 'Hide password' : 'Show password'}
+      >
+        {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+      </button>
+    </div>
+  );
+}
 
 export function Spinner({ label }: { label?: string }) {
   return (

@@ -53,6 +53,13 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         module: 'dashboard',
         end: true,
       },
+      {
+        to: '/my-leave',
+        label: 'My Leave',
+        icon: CalendarDays,
+        permission: 'leave.self',
+        module: 'time-off',
+      },
     ],
   },
   {
@@ -204,37 +211,49 @@ export default function Layout() {
   const settings = useFetch<{ settings: Record<string, string> }>('/settings');
   const companyName = settings.data?.settings.company_name ?? 'vula-erp';
 
-  const bottomItems: NavItem[] = [
-    {
-      to: '/',
-      label: 'Home',
-      icon: LayoutDashboard,
-      permission: 'dashboard.view',
-      module: 'dashboard',
-      end: true,
-    },
-    {
-      to: '/sales',
-      label: 'Sales',
-      icon: ShoppingCart,
-      permission: 'sales.view',
-      module: 'sales',
-    },
-    {
-      to: '/pos',
-      label: 'POS',
-      icon: Store,
-      permission: 'pos.view',
-      module: 'pos',
-    },
-    {
-      to: '/products',
-      label: 'Products',
-      icon: Package,
-      permission: 'products.view',
-      module: 'products',
-    },
-  ].filter(
+  const bottomItems: NavItem[] = (
+    can('dashboard.view')
+      ? [
+          {
+            to: '/',
+            label: 'Home',
+            icon: LayoutDashboard,
+            permission: 'dashboard.view',
+            module: 'dashboard',
+            end: true,
+          },
+          {
+            to: '/sales',
+            label: 'Sales',
+            icon: ShoppingCart,
+            permission: 'sales.view',
+            module: 'sales',
+          },
+          {
+            to: '/pos',
+            label: 'POS',
+            icon: Store,
+            permission: 'pos.view',
+            module: 'pos',
+          },
+          {
+            to: '/products',
+            label: 'Products',
+            icon: Package,
+            permission: 'products.view',
+            module: 'products',
+          },
+        ]
+      : [
+          {
+            to: '/my-leave',
+            label: 'My Leave',
+            icon: CalendarDays,
+            permission: 'leave.self',
+            module: 'time-off',
+          },
+        ]
+  ).filter(
     (item) =>
       (!item.permission || can(item.permission)) && (!item.module || isEnabled(item.module)),
   );

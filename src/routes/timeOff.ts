@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db.js';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
-import { ValidationError, notFound } from '../utils/errors.js';
+import { HttpError, ValidationError, notFound } from '../utils/errors.js';
 import {
   optionalString,
   paramId,
@@ -19,6 +19,59 @@ import { recordAudit } from '../services/audit.js';
  */
 export const leaveRouter = Router();
 leaveRouter.use(authenticate);
+
+interface LinkedEmployee {
+  id: number;
+  employee_number: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  job_title: string | null;
+  status: string;
+}
+
+/** Finds the employee record behind the signed-in user, linking by email if needed. */
+function linkedEmployee(userId: number, email: string): LinkedEmployee {
+  const db = getDb();
+  const employee = db
+    .prepare(
+      `SELECT id, employee_number, first_name, last_name, email, job_title, status, user_id
+       FROM employees
+       WHERE user_id = ? OR (email IS NOT NULL AND lower(email) = lower(?))
+       ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END, id
+       LIMIT 1`,
+    )
+    .get(userId, email, userId) as (LinkedEmployee & { user_id: number | null }) | undefined;
+  if (!employee) {
+    throw new HttpError(
+      403,
+      'No employee record is linked to this login. Ask an administrator to link your user to an employee.',
+      'employee_not_linked',
+    );
+  }
+  if (employee.user_id !== userId) {
+    db.prepare('UPDATE employees SET user_id = ? WHERE id = ?').run(userId, employee.id);
+  }
+  return employee;
+}
+
+function balancesFor(employeeId: number, year: number) {
+  const from = `${year}-01-01`;
+  const to = `${year}-12-31`;
+  return getDb()
+    .prepare(
+      `SELECT lt.id AS leave_type_id, lt.name AS leave_type_name, lt.days_per_year,
+         COALESCE(SUM(CASE WHEN lr.status = 'approved' THEN lr.days END), 0) AS approved_days,
+         COALESCE(SUM(CASE WHEN lr.status = 'pending' THEN lr.days END), 0) AS pending_days
+       FROM leave_types lt
+       LEFT JOIN leave_requests lr
+         ON lr.leave_type_id = lt.id AND lr.employee_id = ?
+        AND lr.end_date >= ? AND lr.start_date <= ?
+       GROUP BY lt.id
+       ORDER BY lt.name`,
+    )
+    .all(employeeId, from, to);
+}
 
 /** Minimal employee list so this module works without the HR module enabled. */
 leaveRouter.get(
@@ -141,6 +194,107 @@ leaveRouter.get(
       .all(from, to);
 
     res.json({ year, balances: rows });
+  }),
+);
+
+// Employee self-service
+leaveRouter.get(
+  '/me',
+  requirePermission('leave.self'),
+  asyncHandler(async (req, res) => {
+    const employee = linkedEmployee(req.user!.id, req.user!.email);
+    const year = Number(req.query.year ?? new Date().getUTCFullYear());
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      throw new ValidationError('Year must be a four-digit year');
+    }
+    const db = getDb();
+    const requests = db
+      .prepare(
+        `SELECT lr.*, lt.name AS leave_type_name
+         FROM leave_requests lr
+         JOIN leave_types lt ON lt.id = lr.leave_type_id
+         WHERE lr.employee_id = ?
+         ORDER BY lr.start_date DESC LIMIT 200`,
+      )
+      .all(employee.id);
+    res.json({
+      year,
+      employee,
+      leaveTypes: db.prepare('SELECT * FROM leave_types ORDER BY name').all(),
+      requests,
+      balances: balancesFor(employee.id, year),
+    });
+  }),
+);
+
+leaveRouter.post(
+  '/me/requests',
+  requirePermission('leave.self'),
+  asyncHandler(async (req, res) => {
+    const employee = linkedEmployee(req.user!.id, req.user!.email);
+    const leaveTypeId = requireInt(req.body?.leaveTypeId, 'Leave type', 1);
+    const startDate = requireDate(req.body?.startDate, 'Start date');
+    const endDate = requireDate(req.body?.endDate, 'End date');
+    if (endDate < startDate) throw new ValidationError('End date cannot be before start date');
+
+    const db = getDb();
+    const leaveType = db.prepare('SELECT id FROM leave_types WHERE id = ?').get(leaveTypeId);
+    if (!leaveType) throw notFound('Leave type not found');
+
+    const days =
+      Math.round(
+        ((new Date(`${endDate}T00:00:00Z`).getTime() -
+          new Date(`${startDate}T00:00:00Z`).getTime()) /
+          86_400_000 +
+          1) *
+          100,
+      ) / 100;
+
+    const result = db
+      .prepare(
+        `INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days, reason)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        employee.id,
+        leaveTypeId,
+        startDate,
+        endDate,
+        days,
+        optionalString(req.body?.reason, 'Reason', 1000),
+      );
+    recordAudit(req.user!.id, 'request', 'leave_request', Number(result.lastInsertRowid));
+    res.status(201).json({
+      leaveRequest: db
+        .prepare(
+          `SELECT lr.*, lt.name AS leave_type_name
+           FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id
+           WHERE lr.id = ?`,
+        )
+        .get(Number(result.lastInsertRowid)),
+    });
+  }),
+);
+
+leaveRouter.post(
+  '/me/requests/:id/cancel',
+  requirePermission('leave.self'),
+  asyncHandler(async (req, res) => {
+    const employee = linkedEmployee(req.user!.id, req.user!.email);
+    const id = paramId(req.params.id);
+    const db = getDb();
+    const request = db
+      .prepare('SELECT id, status FROM leave_requests WHERE id = ? AND employee_id = ?')
+      .get(id, employee.id) as { id: number; status: string } | undefined;
+    if (!request) throw notFound('Leave request not found');
+    if (request.status !== 'pending') {
+      throw new ValidationError('Only pending requests can be cancelled');
+    }
+    db.prepare(
+      "UPDATE leave_requests SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?",
+    ).run(id);
+    recordAudit(req.user!.id, 'cancel', 'leave_request', id);
+    res.json({ ok: true });
   }),
 );
 
