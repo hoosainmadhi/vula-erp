@@ -1371,6 +1371,7 @@ function main(): void {
   const warehouseUserId = createUser('workshop@jabulani.local', 'Sipho', 'Workshop', 'warehouse');
   const accountsUserId = createUser('accounts@jabulani.local', 'Naledi', 'Accounts', 'accountant');
   const employeeUserId = createUser('thabo@jabulani.local', 'Thabo', 'Mokoena', 'employee');
+  createUser('workshop.lead@jabulani.local', 'Sipho', 'Workshop', 'workshop');
 
   createEmployee({
     firstName: 'Jabulani',

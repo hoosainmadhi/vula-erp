@@ -13,13 +13,14 @@ The host proxy on port 3290 routes:
 
 ## Sign in
 
-| User     | Email                     | Password            | Role       |
-| -------- | ------------------------- | ------------------- | ---------- |
-| Admin    | `admin@jabulani.local`    | `JabulaniDemo2026!` | admin      |
-| Sales    | `sales@jabulani.local`    | `JabulaniDemo2026!` | sales      |
-| Workshop | `workshop@jabulani.local` | `JabulaniDemo2026!` | warehouse  |
-| Accounts | `accounts@jabulani.local` | `JabulaniDemo2026!` | accountant |
-| Employee | `thabo@jabulani.local`    | `EmployeeDemo2026!` | employee   |
+| User          | Email                          | Password            | Role       |
+| ------------- | ------------------------------ | ------------------- | ---------- |
+| Admin         | `admin@jabulani.local`         | `JabulaniDemo2026!` | admin      |
+| Sales         | `sales@jabulani.local`         | `JabulaniDemo2026!` | sales      |
+| Workshop      | `workshop@jabulani.local`      | `JabulaniDemo2026!` | warehouse  |
+| Accounts      | `accounts@jabulani.local`      | `JabulaniDemo2026!` | accountant |
+| Employee      | `thabo@jabulani.local`         | `EmployeeDemo2026!` | employee   |
+| Workshop lead | `workshop.lead@jabulani.local` | `WorkshopDemo2026!` | workshop   |
 
 ## What is seeded
 
@@ -45,6 +46,22 @@ One deployment, two branches:
 | --------------- | ------------------- | -------------- | --------------------- |
 | Johannesburg HQ | Johannesburg HQ     | JHB Stock      | Johannesburg Register |
 | Eastern Cape    | Eastern Cape Branch | EC Stock       | Eastern Cape Register |
+
+## Workshop and branches
+
+The **Workshop** module has two demo jobs:
+
+- `WS-00001` — paid invoice, ready for collection, with a cutting-list file
+- `WS-00002` — open invoice, awaiting payment (the payment gate blocks release)
+
+The workshop user lands on **Workshop** and can open jobs, progress operations, upload
+cutting lists and mark jobs collected. The admin can also see all jobs.
+
+Branches are modelled as warehouses:
+
+- **Inventory → Stock on hand** has an All branches / Johannesburg HQ / Eastern Cape filter
+- **Sales orders**, **purchase orders** and **invoices** now have a Branch column and filter
+- New orders can be captured against a branch
 
 ## Employee self-service
 

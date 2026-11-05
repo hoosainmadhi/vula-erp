@@ -26,13 +26,14 @@ Public pages: `/site` · Blog: `/blog`
 
 ### Jabulani Boards
 
-| Role     | Email                     | Password            |
-| -------- | ------------------------- | ------------------- |
-| Admin    | `admin@jabulani.local`    | `JabulaniDemo2026!` |
-| Sales    | `sales@jabulani.local`    | `JabulaniDemo2026!` |
-| Workshop | `workshop@jabulani.local` | `JabulaniDemo2026!` |
-| Accounts | `accounts@jabulani.local` | `JabulaniDemo2026!` |
-| Employee | `thabo@jabulani.local`    | `EmployeeDemo2026!` |
+| Role          | Email                          | Password            |
+| ------------- | ------------------------------ | ------------------- |
+| Admin         | `admin@jabulani.local`         | `JabulaniDemo2026!` |
+| Sales         | `sales@jabulani.local`         | `JabulaniDemo2026!` |
+| Workshop      | `workshop@jabulani.local`      | `JabulaniDemo2026!` |
+| Accounts      | `accounts@jabulani.local`      | `JabulaniDemo2026!` |
+| Employee      | `thabo@jabulani.local`         | `EmployeeDemo2026!` |
+| Workshop lead | `workshop.lead@jabulani.local` | `WorkshopDemo2026!` |
 
 ## Employee self-service
 
